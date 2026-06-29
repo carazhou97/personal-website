@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  html,body{margin:0}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.16);border-radius:6px}
+  @keyframes mFade{from{opacity:0}to{opacity:1}}
+  @keyframes mRise{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes unroll{from{clip-path:inset(0 100% 0 0);opacity:.4}to{clip-path:inset(0 0 0 0);opacity:1}}
+  @keyframes cardIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+  @keyframes pop{0%{transform:translateY(0) scale(1)}7%{transform:translateY(-9px) scale(1.08)}16%{transform:translateY(0) scale(1)}100%{transform:translateY(0) scale(1)}}
+  @keyframes developIn{
+    0%{filter:blur(7px) saturate(.5) brightness(1.04);transform:translateY(8px)}
+    100%{filter:blur(0) saturate(1) brightness(1);transform:none}
+  }
+  @keyframes hintPulse{0%,100%{opacity:.5}50%{opacity:1}}
+  /* darkroom safelight overlay: shown until the user clicks to develop */
+  .darkroom{transition:opacity 1.05s ease}
+  .darkroom.gone{opacity:0;pointer-events:none}
+  /* develop-in sharpen — content stays visible so the safelight can reveal it on hover */
+  .go .dev-bio{animation:developIn .9s ease-out both}
+  .go .reel-wrap{animation:developIn .9s ease-out .35s both}
+  @media (prefers-reduced-motion: reduce){
+    .darkroom{display:none!important}
+    .dev-bio,.reel-wrap{animation:none!important}
+  }
+</style>
+</helmet>
+<div style="position:relative;font-family:'Newsreader',serif;color:#15130e;background:#ffffff">
+
+  <!-- persistent top bar + progress rail -->
+  <div id="topbar" style="position:fixed;top:0;left:0;right:0;z-index:70;opacity:0;transform:translateY(-100%);transition:opacity .4s ease,transform .4s ease;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid rgba(0,0,0,.08);pointer-events:none">
+    <div id="topProgress" style="position:absolute;left:0;top:0;height:2px;width:0%;background:#e0531d"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:11px clamp(20px,4vw,40px);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#15130e">
+      <span onClick="{{ goTop }}" style="cursor:pointer">Cara Zhou</span>
+      <span style="display:flex;gap:clamp(10px,1.6vw,20px);flex-wrap:wrap;justify-content:flex-end">
+        <span onClick="{{ goAbout }}" style="cursor:pointer" style-hover="opacity:.5">About</span>
+        <span onClick="{{ goWriting }}" style="cursor:pointer" style-hover="opacity:.5">Writing</span>
+        <span onClick="{{ goDeals }}" style="cursor:pointer" style-hover="opacity:.5">Deals</span>
+        <span onClick="{{ goAi }}" style="cursor:pointer" style-hover="opacity:.5">AI</span>
+        <span onClick="{{ goSocial }}" style="cursor:pointer" style-hover="opacity:.5">Social</span>
+        <span onClick="{{ goOuttakes }}" style="cursor:pointer" style-hover="opacity:.5">Outtakes</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- ============ HERO ============ -->
+  <section class="{{ heroClass }}" style="position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;padding:clamp(34px,4.5vw,56px) clamp(28px,5vw,64px) 48px">
+
+    <!-- top-half: orange panel + white spotlight pool + grain -->
+    <div style="position:absolute;top:0;left:0;right:0;height:62%;overflow:hidden;pointer-events:none;z-index:1;-webkit-mask-image:linear-gradient(to bottom,#000 58%,transparent 100%);mask-image:linear-gradient(to bottom,#000 58%,transparent 100%)">
+      <div id="heroPanel" style="position:absolute;inset:0;background:#e0531d"></div>
+      <div id="heroSpot" style="position:absolute;inset:0;background:radial-gradient(360px circle at 50% 150px, rgba(255,248,242,.95), rgba(255,240,230,.4) 34%, transparent 62%)"></div>
+      <canvas id="grainCanvas" ref="{{ grainRef }}" style="position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;opacity:.5;mix-blend-mode:overlay"></canvas>
+    </div>
+
+    <!-- masthead (develops in first) — white text, flips to orange inside the white spotlight -->
+    <div class="dev-bio" style="flex:none;position:relative;z-index:2">
+      <div style="position:relative">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#fff6ef">
+          <span>Cara Zhou | New York</span>
+        </div>
+        <h1 style="font-weight:400;font-size:clamp(30px,4.6vw,54px);line-height:1.13;letter-spacing:-.012em;max-width:900px;margin:clamp(36px,5vw,56px) 0 0;text-wrap:pretty;color:#fffaf4"><span style="font-style: italic;">I've lived three lives.</span>&nbsp;<div>First life I wrote.&nbsp;</div><div>Second life I survive.&nbsp;</div><div>Third life I'm betting on <span style="font-style: italic;">the unknown.</span></div></h1>
+        <p style="font-size:clamp(17px,1.6vw,20px);line-height:1.5;color:#ffe7d8;max-width:580px;margin:22px 0 0;text-wrap:pretty">A running index of deals, writing, and things I’ve built.</p>
+
+        <!-- orange duplicate, revealed only under the white spotlight -->
+        <div id="bioHot" aria-hidden="true" style="position:absolute;inset:0;pointer-events:none;color:#c6400d;-webkit-mask-image:radial-gradient(240px circle at var(--tx,50%) var(--ty,38%), #000 34%, rgba(0,0,0,.4) 58%, transparent 80%);mask-image:radial-gradient(240px circle at var(--tx,50%) var(--ty,38%), #000 34%, rgba(0,0,0,.4) 58%, transparent 80%)">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:inherit">
+            <span>Cara Zhou | New York</span>
+          </div>
+          <h1 style="font-weight:400;font-size:clamp(30px,4.6vw,54px);line-height:1.13;letter-spacing:-.012em;max-width:900px;margin:clamp(36px,5vw,56px) 0 0;text-wrap:pretty;color:inherit"><span style="font-style: italic;">I've lived three lives.</span>&nbsp;<div>First life I wrote.&nbsp;</div><div>Second life I survive.&nbsp;</div><div>Third life I'm betting on <span style="font-style: italic;">the unknown.</span></div></h1>
+          <p style="font-size:clamp(17px,1.6vw,20px);line-height:1.5;color:inherit;max-width:580px;margin:22px 0 0;text-wrap:pretty">A running index of deals, writing, and things I’ve built.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- spacer -->
+    <div style="flex:1;min-height:40px"></div>
+
+    <!-- the reel — draggable carousel -->
+    <div class="reel-wrap" style="position:relative;z-index:2">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#6b6256;margin-bottom:clamp(8px,1.4vw,14px);border-bottom:1px solid rgba(21,19,14,.82);padding-bottom:12px">
+        <span>The reel — six objects</span>
+        <span style="color:#15130e">hover to focus · click to develop</span>
+      </div>
+      <!-- rolls — draggable momentum carousel -->
+      <div ref="{{ viewportRef }}" style="position:relative;overflow:hidden;cursor:pointer;padding:30px 0 6px">
+        <div ref="{{ trackRef }}" style="display:flex;gap:40px;width:max-content;will-change:transform">
+          <sc-for list="{{ carItems }}" as="r" hint-placeholder-count="6">
+            <div class="car-item" data-idx="{{ r.idx }}" onClick="{{ r.onClick }}" style="flex:none;width:168px;display:flex;flex-direction:column;align-items:center;gap:14px;will-change:transform;cursor:pointer">
+              <img src="{{ r.img }}" alt="{{ r.label }}" draggable="false" style="width:100%;height:auto;display:block;filter:drop-shadow(3px 9px 9px rgba(26,20,8,.2))">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.15em;color:#15130e;pointer-events:none">{{ r.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ============ DARKROOM OVERLAY (cursor safelight · click to develop) ============ -->
+  <div id="darkroom" class="darkroom {{ overlayClass }}" onClick="{{ develop }}" style="position:fixed;inset:0;z-index:60;cursor:pointer;display:flex;align-items:center;justify-content:center;--mx:50%;--my:42%">
+    <div id="drCover" style="position:absolute;inset:0;background:radial-gradient(460px circle at var(--mx,50%) var(--my,42%), rgba(226,76,44,.42), rgba(140,28,16,.16) 32%, #070706 60%);-webkit-mask-image:radial-gradient(340px circle at var(--mx,50%) var(--my,42%), transparent 0%, rgba(0,0,0,.1) 22%, #000 66%);mask-image:radial-gradient(340px circle at var(--mx,50%) var(--my,42%), transparent 0%, rgba(0,0,0,.1) 22%, #000 66%)"></div>
+    <div style="position:relative;text-align:center;pointer-events:none">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.34em;text-transform:uppercase;color:#f0c6bc;animation:hintPulse 2.6s ease-in-out infinite">Darkroom · Safelight</div>
+      <div style="font-family:'Newsreader',serif;font-style:italic;font-size:clamp(23px,3.2vw,36px);color:#f7ebe6;margin-top:14px">Click or tap to develop</div>
+    </div>
+  </div>
+
+  <!-- ============ PORTFOLIO (Sample) ============ -->
+  <div id="portfolio" style="border-top:1px solid rgba(0,0,0,.1)">
+    
+  <dc-import name="Sample" accent="{{ accentColor }}" hint-size="100%,400vh" style="width:100%"></dc-import></div>
+
+  <!-- ============ UNROLL TASTE CARD ============ -->
+  <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeModal }}" style="position:fixed;inset:0;z-index:80;background:rgba(20,18,14,.46);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:5vw;animation:mFade .25s ease">
+      <div onClick="{{ stop }}" style="position:relative;display:flex;align-items:center;flex-wrap:wrap;gap:6px 0;background:#f4f1e8;border-radius:6px;box-shadow:0 34px 90px rgba(0,0,0,.42);max-width:820px;width:100%;padding:34px 36px;animation:mRise .32s cubic-bezier(.2,.7,.3,1)">
+
+        <div onClick="{{ closeModal }}" style="position:absolute;top:14px;right:16px;width:30px;height:30px;border-radius:50%;background:#15130e;color:#f4f1e8;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'Newsreader',serif;font-size:15px;z-index:3" style-hover="opacity:.8">×</div>
+
+        <img src="{{ mImg }}" alt="{{ mLabel }}" style="width:168px;height:auto;flex:none;transform:rotate(-3deg);filter:drop-shadow(3px 9px 10px rgba(26,20,8,.22));pointer-events:none;z-index:2">
+
+        <div style="flex:1;min-width:300px;display:flex;align-items:stretch;animation:unroll .58s cubic-bezier(.2,.7,.3,1) both">
+          <div style="width:34px;flex:none;background:#16130c;display:flex;flex-direction:column;justify-content:space-between;padding:7px 0;border-radius:2px">
+            <sc-for list="{{ perfs }}" as="p" hint-placeholder-count="6">
+              <div style="width:14px;height:9px;border-radius:2px;background:#f4f1e8;margin:0 auto"></div>
+            </sc-for>
+          </div>
+          <div style="flex:1;background:#fffdf7;border:1px solid rgba(0,0,0,.1);border-left:none;border-radius:0 4px 4px 0;padding:26px 30px;animation:cardIn .4s ease .34s both">
+            <div style="font-family:'Newsreader',serif;font-size:10px;letter-spacing:.16em;color:#9a9184;text-transform:uppercase;margin-bottom:12px">{{ mNo }} — Section</div>
+            <h2 style="font-size:34px;font-weight:400;letter-spacing:-.01em;margin:0 0 14px;line-height:1.06">{{ mLabel }}</h2>
+            <p style="font-size:19px;line-height:1.5;margin:0 0 24px;color:#2c2820;text-wrap:pretty">{{ mTaste }}</p>
+            <span onClick="{{ mReadMore }}" style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-family:'Newsreader',serif;font-size:13px;letter-spacing:.06em;color:#15130e;border-bottom:1px solid #15130e;padding-bottom:3px" style-hover="gap:11px">Read more ↓</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+<svg width="160" height="80" viewBox="0 0 160 80" style="position: absolute; left: 31px; top: 13px; width: 160px; height: 80px; overflow: visible; fill: none; stroke: #8a8378; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round"><path d="M 0 80 L 160 0 M 148.8 14.1 L 160 0 L 142.0 0.5"></path></svg></x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;mood&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Darkroom&quot;,&quot;Midnight&quot;,&quot;Sepia&quot;],&quot;default&quot;:&quot;Darkroom&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;reelTempo&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Languid&quot;,&quot;Steady&quot;,&quot;Brisk&quot;],&quot;default&quot;:&quot;Brisk&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;grain&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Clean&quot;,&quot;Film&quot;,&quot;Heavy&quot;],&quot;default&quot;:&quot;Film&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    const rm = typeof window!=='undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.state = { open:null, developed: !!rm };
+    this.viewportRef = React.createRef();
+    this.trackRef = React.createRef();
+    this.grainRef = React.createRef();
+    this.offset = 0;
+    this.vel = 0;
+    this.drift = 0.5;
+    this.dragging = false;
+    this.setWidth = 0;
+  }
+
+  develop(){
+    if(this.state.developed) return;
+    if(this._devTimer){ clearTimeout(this._devTimer); this._devTimer=null; }
+    this.setState({ developed:true });
+    const el = document.getElementById('darkroom');
+    if(el){
+      el.style.transition = 'opacity .95s ease';
+      el.style.opacity = '0';
+      el.style.pointerEvents = 'none';
+      setTimeout(()=>{ el.style.display = 'none'; }, 1000);
+    }
+  }
+
+  get sections(){
+    return [
+      { id:'about',   label:'About',   img:'uploads/roll-a.png', tilt:'-4deg',
+        taste:'The short version — a writer who became a banker, now betting on AI. Three lives, one throughline.' },
+      { id:'writing', label:'Writing', img:'uploads/roll-b.png', tilt:'4deg',
+        taste:'Essays and memos on markets, attention, and ambition — the contrarian case, argued in good faith.' },
+      { id:'deals',   label:'Deals',   img:'uploads/roll-c.png', tilt:'-4deg',
+        taste:'Selected transactions — sell-side, buy-side, cross-border. Models built and narratives owned end to end.' },
+      { id:'ai',      label:'AI Projects', img:'uploads/roll-d.png', tilt:'4deg',
+        taste:'Things I’ve vibe-coded — a CRM, an inbox agent, a standup bot. Real users, zero engineers.' },
+      { id:'reading', label:'Social', img:'uploads/roll-e.png', tilt:'-4deg',
+        taste:'My Xiaohongshu — notes on operating, AI, and taste for @xiaotong. Covers, titles, and likes.' },
+      { id:'objects', label:'Outtakes', img:'uploads/roll-f.png', tilt:'4deg',
+        taste:'Off the reel — stand-up sets, folk art I collect, and whatever else I’m into lately.' }
+    ];
+  }
+
+  get writing(){
+    return [
+      { year:'2024', title:'The Series B Memo', desc:'Placeholder — an internal investment memo on AI infrastructure: a clear thesis, a sharp risk section, a recommendation that held up.' },
+      { year:'2023', title:'Folk Theory of Markets', desc:'Placeholder — a long-form piece on how informal mental models shape markets. Most-read essay to date.' },
+      { year:'2024', title:'Red Team', desc:'Placeholder — a devil’s-advocate teardown of a hot AI deal: the contrarian case, argued in good faith.' }
+    ];
+  }
+
+  get deals(){
+    return [
+      { year:'2023', title:'$4 Billion Carve-Out', desc:'Placeholder — co-led the sell-side process on a software carve-out. Built the model, ran diligence, drafted the CIM that anchored a competitive auction.' },
+      { year:'2022', title:'Project Atlas', desc:'Placeholder — buy-side advisory on a cross-border acquisition. Owned the synergy analysis and the board-deck narrative end to end.' },
+      { year:'2023', title:'Margin Map', desc:'Placeholder — a unit-economics model a portfolio company still uses for monthly board reporting.' }
+    ];
+  }
+
+  get ai(){
+    return [
+      { year:'2024', title:'Vibe CRM', desc:'Placeholder — a lightweight relationship tracker built over a weekend to manage my own pipeline. Real users, real retention, zero engineers.' },
+      { year:'2025', title:'Inbox Zero', desc:'Placeholder — an AI triage agent that sorts and drafts replies. Shipped to a private beta of 60 operators.' },
+      { year:'2025', title:'Standup Bot', desc:'Placeholder — a Slack agent that compiles async standups into a daily digest. First product with paying teams.' }
+    ];
+  }
+
+  openItem(i){ this.setState({ open:i }); }
+  closeModal(){ this.setState({ open:null }); }
+
+  scrollTo(id){
+    const el = document.getElementById(id) || document.querySelector('[data-section="'+id+'"]');
+    if(el){
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo({ top, behavior:'smooth' });
+    }
+  }
+  goSection(id){
+    this.setState({ open:null });
+    requestAnimationFrame(()=>{ requestAnimationFrame(()=>this.scrollTo(id)); });
+  }
+
+  componentDidMount(){
+    this._key = (e)=>{ if(e.key==='Escape') this.setState({ open:null }); };
+    window.addEventListener('keydown', this._key);
+    this._move = (e)=>{
+      const x = e.clientX, y = e.clientY;
+      if(!this.state.developed){
+        const el = document.getElementById('darkroom');
+        if(el){ el.style.setProperty('--mx', x+'px'); el.style.setProperty('--my', y+'px'); }
+      } else {
+        const sp = document.getElementById('heroSpot');
+        if(sp){
+          const r = sp.getBoundingClientRect();
+          sp.style.background = 'radial-gradient(330px circle at '+(x-r.left)+'px '+(y-r.top)+'px, rgba(255,249,244,.96), rgba(255,240,230,.42) 36%, transparent 64%)';
+        }
+        const hot = document.getElementById('bioHot');
+        if(hot){
+          const hr = hot.getBoundingClientRect();
+          hot.style.setProperty('--tx', (x-hr.left)+'px');
+          hot.style.setProperty('--ty', (y-hr.top)+'px');
+        }
+      }
+    };
+    window.addEventListener('pointermove', this._move, { passive:true });
+    this.setupCarousel();
+    this.setupGrain();
+    this.applyTheme();
+    // top bar + progress rail
+    this._scroll = ()=>{
+      const h = document.documentElement;
+      const max = h.scrollHeight - window.innerHeight;
+      const pct = max>0 ? (window.scrollY/max)*100 : 0;
+      const pe = document.getElementById('topProgress'); if(pe) pe.style.width = pct.toFixed(2)+'%';
+      const bar = document.getElementById('topbar');
+      if(bar){
+        const show = window.scrollY > window.innerHeight*0.72;
+        bar.style.opacity = show ? '1' : '0';
+        bar.style.transform = show ? 'none' : 'translateY(-100%)';
+        bar.style.pointerEvents = show ? 'auto' : 'none';
+      }
+    };
+    window.addEventListener('scroll', this._scroll, { passive:true });
+    this._scroll();
+  }
+  componentDidUpdate(){ this.applyTheme(); }
+
+  themeFor(mood){
+    switch(mood){
+      case 'Midnight': return { panel:'#16335f', flip:'#11346e', safeA:'rgba(74,128,214,.46)', safeB:'rgba(18,38,86,.18)' };
+      case 'Sepia':    return { panel:'#5f4124', flip:'#5a3a1a', safeA:'rgba(188,132,58,.48)', safeB:'rgba(86,56,22,.2)' };
+      default:         return { panel:'#e0531d', flip:'#c6400d', safeA:'rgba(226,76,44,.42)', safeB:'rgba(140,28,16,.16)' };
+    }
+  }
+  driftFor(t){ return t==='Languid' ? 0.26 : t==='Brisk' ? 0.86 : 0.5; }
+  grainOpacityFor(g){ return g==='Clean' ? 0 : g==='Heavy' ? 0.85 : 0.5; }
+
+  applyTheme(){
+    const t = this.themeFor(this.props.mood || 'Darkroom');
+    this._theme = t;
+    this.drift = this.driftFor(this.props.reelTempo || 'Steady');
+    const panel = document.getElementById('heroPanel'); if(panel) panel.style.background = t.panel;
+    const hot = document.getElementById('bioHot'); if(hot) hot.style.color = t.flip;
+    const cv = document.getElementById('grainCanvas'); if(cv) cv.style.opacity = String(this.grainOpacityFor(this.props.grain || 'Film'));
+    const dr = document.getElementById('drCover');
+    if(dr && !this.state.developed){
+      dr.style.background = 'radial-gradient(460px circle at var(--mx,50%) var(--my,42%), '+t.safeA+', '+t.safeB+' 32%, #070706 60%)';
+    }
+    const tp = document.getElementById('topProgress'); if(tp) tp.style.background = t.panel;
+  }
+  componentWillUnmount(){
+    window.removeEventListener('keydown', this._key);
+    window.removeEventListener('pointermove', this._move);
+    if(this._scroll) window.removeEventListener('scroll', this._scroll);
+    if(this._devTimer) clearTimeout(this._devTimer);
+    if(this._raf) cancelAnimationFrame(this._raf);
+    if(this._grainRaf) cancelAnimationFrame(this._grainRaf);
+    const vp = this.viewportRef.current;
+    if(vp && this._teardown) this._teardown();
+  }
+
+  setupGrain(){
+    const cv = this.grainRef.current;
+    if(!cv){ this._grainRaf = requestAnimationFrame(()=>this.setupGrain()); return; }
+    const ctx = cv.getContext('2d', { alpha:true });
+    if(!ctx) return;
+    const S = 320;
+    cv.width = S; cv.height = S;
+    const alpha = 16, refresh = 2;
+    let frame = 0;
+    const draw = ()=>{
+      const img = ctx.createImageData(S, S);
+      const d = img.data;
+      for(let i=0;i<d.length;i+=4){
+        const v = Math.random()*255;
+        d[i]=v; d[i+1]=v; d[i+2]=v; d[i+3]=alpha;
+      }
+      ctx.putImageData(img, 0, 0);
+    };
+    const loop = ()=>{
+      if(frame % refresh === 0) draw();
+      frame++;
+      this._grainRaf = requestAnimationFrame(loop);
+    };
+    loop();
+  }
+
+  setupCarousel(){
+    const vp = this.viewportRef.current, track = this.trackRef.current;
+    if(!vp || !track){ this._raf = requestAnimationFrame(()=>this.setupCarousel()); return; }
+    // measure one set width (track holds 3 repeats of 6 items)
+    const measure = ()=>{ this.setWidth = track.scrollWidth / 3; };
+    measure();
+    if(!this.setWidth){ this._raf = requestAnimationFrame(()=>this.setupCarousel()); return; }
+    this.offset = this.setWidth; // start in the middle copy
+    this._dragMoved = false;
+
+    // auto-slide that eases to a stop on hover (so rolls stay easy to click)
+    this.hovering = false;
+    this.hoverEl = null;
+    this.speed = 0;
+    const onEnter = ()=>{ this.hovering = true; };
+    const onLeave = ()=>{ this.hovering = false; this.hoverEl = null; };
+    const onMove = (e)=>{ this.hovering = true; const t = document.elementFromPoint(e.clientX, e.clientY); this.hoverEl = (t && t.closest) ? t.closest('.car-item') : null; };
+    vp.addEventListener('pointerenter', onEnter);
+    vp.addEventListener('pointerleave', onLeave);
+    vp.addEventListener('pointermove', onMove);
+    this._teardown = ()=>{
+      vp.removeEventListener('pointerenter', onEnter);
+      vp.removeEventListener('pointerleave', onLeave);
+      vp.removeEventListener('pointermove', onMove);
+    };
+
+    const tick = ()=>{
+      const track = this.trackRef.current, vp = this.viewportRef.current;
+      if(track && vp){
+        const target = this.hovering ? 0 : this.drift;
+        this.speed += (target - this.speed) * 0.12; // ease in/out
+        if(this.speed < 0.012 && this.hovering) this.speed = 0;
+        this.offset += this.speed;
+        const set = this.setWidth || 1;
+        if(this.offset > 2*set) this.offset -= set;
+        if(this.offset < set*0.001) this.offset += set;
+        track.style.transform = 'translateX(' + (-this.offset) + 'px)';
+        const vpc = vp.clientWidth/2;
+        const vpLeft = vp.getBoundingClientRect().left;
+        const items = track.children;
+        const focusing = !!this.hoverEl;
+        for(let i=0;i<items.length;i++){
+          const el = items[i];
+          const r = el.getBoundingClientRect();
+          const c = (r.left - vpLeft) + r.width/2;
+          const d = Math.min(1, Math.abs(c - vpc) / (vpc*0.9));
+          const k = 1 - d;
+          let tScale, tTy, tOp, tGray;
+          if(focusing){
+            const f = (el === this.hoverEl);
+            tScale = f ? 1.2 : 0.84;
+            tTy = f ? -16 : 0;
+            tOp = f ? 1 : 0.34;
+            tGray = f ? 0 : 0.6;
+          } else {
+            tScale = 0.8 + 0.34*k;
+            tTy = -22*k;
+            tOp = 0.5 + 0.5*k;
+            tGray = 0;
+          }
+          if(el._sc==null){ el._sc=tScale; el._ty=tTy; el._op=tOp; el._gr=tGray; }
+          el._sc += (tScale-el._sc)*0.18;
+          el._ty += (tTy-el._ty)*0.18;
+          el._op += (tOp-el._op)*0.18;
+          el._gr += (tGray-el._gr)*0.18;
+          el.style.transform = 'translateY(' + el._ty.toFixed(1) + 'px) scale(' + el._sc.toFixed(3) + ')';
+          el.style.opacity = el._op.toFixed(3);
+          const sh = focusing ? (el===this.hoverEl?1:0.25) : k;
+          el.style.zIndex = String(Math.round(100*sh));
+          el.firstElementChild.style.filter = 'grayscale(' + el._gr.toFixed(2) + ') drop-shadow(' + (3+4*sh).toFixed(1) + 'px ' + (9+7*sh).toFixed(1) + 'px ' + (9+8*sh).toFixed(1) + 'px rgba(26,20,8,' + (0.2+0.14*sh).toFixed(3) + '))';
+        }
+      }
+      this._raf = requestAnimationFrame(tick);
+    };
+    this._raf = requestAnimationFrame(tick);
+  }
+
+  renderVals(){
+    const s = this.sections;
+    const reps = [0,1,2];
+    const carItems = [];
+    reps.forEach(()=> s.forEach((o,i)=> carItems.push({ img:o.img, label:o.label, idx:i, onClick:()=>{ if(!this._dragMoved) this.openItem(i); } })));
+    const open = this.state.open;
+    const cur = open==null ? null : s[open];
+    return {
+      carItems,
+      viewportRef:this.viewportRef, trackRef:this.trackRef, grainRef:this.grainRef,
+      writing:this.writing, deals:this.deals, ai:this.ai,
+      perfs:[0,1,2,3,4,5],
+      heroClass: this.state.developed ? 'go' : '',
+      overlayClass: this.state.developed ? 'gone' : '',
+      develop:()=>this.develop(),
+      modalOpen: open!=null,
+      closeModal:()=>this.closeModal(),
+      stop:(e)=>{ e.stopPropagation(); },
+      accentColor: this.themeFor(this.props.mood || 'Darkroom').panel,
+      goTop:()=>window.scrollTo({ top:0, behavior:'smooth' }),
+      goAbout:()=>this.goSection('about'),
+      goWriting:()=>this.goSection('writing'),
+      goDeals:()=>this.goSection('deals'),
+      goAi:()=>this.goSection('ai'),
+      goSocial:()=>this.goSection('reading'),
+      goOuttakes:()=>this.goSection('objects'),
+      mImg: cur?cur.img:'', mLabel: cur?cur.label:'', mTaste: cur?cur.taste:'',
+      mReadMore: cur?(()=>this.goSection(cur.id)):(()=>{}),
+      mNo: open==null ? '' : String(open+1).padStart(2,'0')
+    };
+  }
+}
+</script>
+</body>
+</html>
