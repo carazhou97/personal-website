@@ -22,19 +22,59 @@
   .led-row{opacity:0;filter:blur(7px) saturate(.25) brightness(1.04);transform:translateY(16px);transition:opacity .75s ease,filter .75s ease,transform .75s cubic-bezier(.2,.7,.3,1)}
   .led-row.in{opacity:1;filter:none;transform:none}
   @media (prefers-reduced-motion: reduce){ .led-row{opacity:1;filter:none;transform:none} }
+  </style>
+  <script type="module" src="./bloom.js"></script>
+  <script type="module" src="./chartforge.js"></script>
+  <style>
+  /* ---------- MOBILE ---------- */
+  @media (max-width: 860px){
+    .sc-root{flex-direction:column !important}
+    .sc-nav{position:sticky !important;top:0 !important;height:auto !important;width:100% !important;flex-direction:row !important;align-items:center !important;justify-content:flex-start !important;padding:9px 14px !important;border-right:none !important;border-bottom:1px solid rgba(0,0,0,.12) !important;z-index:50 !important}
+    .sc-nav > div{display:flex !important;flex-direction:row !important;gap:6px !important;width:100% !important;overflow-x:auto !important;-webkit-overflow-scrolling:touch !important}
+    .nav-row{font-size:15px !important;padding:7px 13px !important;white-space:nowrap !important;flex:none !important;margin:0 !important}
+    .nav-num,.nav-row sup{display:none !important}
+    .sc-corner{display:none !important}
+    section[data-section]{padding:34px 18px !important;min-height:0 !important}
+    .sc-strip{margin:-34px -18px 26px !important}
+    section[data-section] > h1,.sec-head h1{font-size:38px !important;line-height:1.05 !important}
+    .sec-head{flex-wrap:wrap !important;gap:6px 16px !important;margin-bottom:18px !important}
+    .sec-tag{display:none !important}
+    .sc-about-body{grid-template-columns:1fr !important;gap:20px !important;margin-top:22px !important}
+    .sc-about-body p{font-size:20px !important}
+    .sc-foot{grid-template-columns:1fr !important;column-gap:0 !important;row-gap:13px !important}
+    .sc-cards2{grid-template-columns:1fr !important}
+    .sc-social{grid-template-columns:repeat(2,1fr) !important;gap:14px !important}
+    .sc-standup{grid-template-columns:1fr !important}
+    .sc-objrow{grid-template-columns:26px 1fr !important;column-gap:8px !important}
+    .obj-meta{display:none !important}
+    .sc-reader-grid{grid-template-columns:1fr !important;gap:24px !important;padding:64px 18px 80px !important}
+    .sc-reader-title{position:static !important}
+    .sc-reader-title h1{font-size:34px !important}
+  }
+  /* ---------- DEAL SHELF: vertical spines, infinite drift ---------- */
+  .deal-scroll{overflow-x:auto;overflow-y:visible;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent);mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent)}
+  .deal-scroll::-webkit-scrollbar{display:none}
+  .deal-track{display:flex;align-items:flex-end;gap:16px;width:max-content}
+  .dspine{position:relative;flex:none;width:76px;height:460px;overflow:hidden;cursor:pointer;border-radius:2px;transition:width .55s cubic-bezier(.2,.72,.24,1),box-shadow .4s ease}
+  .dspine:hover{width:466px;box-shadow:0 26px 54px rgba(0,0,0,.28)}
+  .dspine-closed{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:22px 6px;transition:opacity .3s ease;text-align:center}
+  .dspine:hover .dspine-closed{opacity:0}
+  .dspine-open{position:absolute;top:0;left:0;height:100%;width:466px;padding:34px 38px;display:flex;flex-direction:column;justify-content:space-between;opacity:0;transition:opacity .45s ease .12s;pointer-events:none}
+  .dspine:hover .dspine-open{opacity:1}
+  .dspine-title{writing-mode:vertical-rl;text-orientation:mixed;font-family:'Newsreader',Georgia,serif;font-size:26px;letter-spacing:.05em;line-height:1;font-weight:500}
 </style>
 </helmet>
 <x-import component-from-global-scope="image-slot" from="./image-slot.js" hint-size="1px,1px" style="display:none;position:absolute"></x-import>
 
-<div style="display:flex;align-items:flex-start;background:#fff;font-family:'Newsreader',Georgia,serif;color:#1b1714">
+<div class="sc-root" style="display:flex;align-items:flex-start;background:#fff;font-family:'Newsreader',Georgia,serif;color:#1b1714">
 
   <!-- ===================== PERSISTENT LEFT NAV ===================== -->
-  <nav style="position:sticky;top:0;height:100vh;width:230px;flex:none;background:#FBF7F0;border-right:1px solid rgba(0,0,0,.07);padding:38px 28px;display:flex;flex-direction:column;justify-content:space-between;z-index:30">
+  <nav class="sc-nav" style="position:sticky;top:0;height:100vh;width:230px;flex:none;background:#FBF7F0;border-right:1px solid rgba(0,0,0,.07);padding:38px 28px;display:flex;flex-direction:column;justify-content:space-between;z-index:30">
     <div>
       <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="6">
-        <div onClick="{{ item.onClick }}" style="{{ item.rowStyle }}">
+        <div onClick="{{ item.onClick }}" class="nav-row" style="{{ item.rowStyle }}">
           <span>{{ item.label }}<sup style="font-size:12px">{{ item.sup }}</sup></span>
-          <span style="{{ item.numStyle }}">{{ item.num }}</span>
+          <span class="nav-num" style="{{ item.numStyle }}">{{ item.num }}</span>
         </div>
       </sc-for>
     </div>
@@ -44,7 +84,7 @@
   <main ref="{{ scrollRef }}" style="flex:1;position:relative;min-width:0">
 
     <!-- persistent corner mark -->
-    <div style="position:sticky;top:0;height:0;z-index:25;pointer-events:none">
+    <div class="sc-corner" style="position:sticky;top:0;height:0;z-index:25;pointer-events:none">
       <div style="position:absolute;right:26px;top:24px;width:40px;height:40px;border-radius:50%;background:#1b1714;display:flex;align-items:center;justify-content:center;pointer-events:auto;cursor:pointer">
         <div style="width:15px;height:15px;border:2px solid #FBF7F0;border-radius:50%;position:relative"><div style="position:absolute;width:4px;height:4px;background:#FBF7F0;border-radius:50%;top:3.5px;left:3.5px"></div></div>
       </div>
@@ -52,10 +92,10 @@
 
     <!-- ---------- SECTION 1 : ABOUT ---------- -->
     <section ref="{{ aboutRef }}" data-section="about" data-screen-label="01 About" style="min-height:100vh;background:#fff;padding:62px 76px 48px;display:flex;flex-direction:column">
-      <div style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
+      <div class="sc-strip" style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
       <h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:74px;letter-spacing:-.01em;margin:0 0 auto">About</h1>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:64px;max-width:1180px;margin:40px 0 48px;align-self:center;width:100%">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:64px;max-width:1180px;margin:40px 0 48px;align-self:center;width:100%" class="sc-about-body">
         <div style="display:flex;flex-direction:column;gap:24px">
           <p style="font-size:27px;line-height:1.36;margin:0;color:#1b1714;text-wrap:pretty">Hi, I’m Cara <span style="position:relative;display:inline-block;vertical-align:-3px"><span onClick="{{ toggleBaby }}" title="psst — click me" style="display:inline-block;cursor:pointer;transition:transform .2s ease" style-hover="transform:scale(1.18) rotate(-6deg)">👶</span><sc-if value="{{ babyOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);width:228px;background:#fff;color:#1b1714;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:13px 15px;box-shadow:0 14px 34px rgba(0,0,0,.28);z-index:40;font-family:'Newsreader',Georgia,serif;font-style:italic;font-size:15px;line-height:1.4;text-align:center"><span onClick="{{ toggleBaby }}" style="position:absolute;top:6px;right:9px;cursor:pointer;font-style:normal;font-family:'IBM Plex Mono',monospace;font-size:12px;color:rgba(255,255,255,.6)">×</span>trying to find a baby photo of me from my mom…<span style="position:absolute;top:100%;left:50%;transform:translateX(-50%);border:7px solid transparent;border-top-color:#fff"></span></span></sc-if></span>. I grew up between China and the U.S.<sup style="font-size:.5em">1</sup> 🇨🇳🇺🇸, moving between the deal room<sup style="font-size:.5em">2</sup> 📈 and the newsroom<sup style="font-size:.5em">3</sup> <span style="position:relative;display:inline-block;vertical-align:-3px"><span onClick="{{ toggleNews }}" title="psst — click me" style="display:inline-block;cursor:pointer;transition:transform .2s ease" style-hover="transform:scale(1.18) rotate(-6deg)">📰</span><sc-if value="{{ newsOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);width:230px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:10px;box-shadow:0 16px 40px rgba(0,0,0,.4);z-index:40"><span onClick="{{ toggleNews }}" style="position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:#1b1714;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3)">×</span><img src="uploads/caixin-cover.jpg" alt="Caixin Weekly cover" style="display:block;width:100%;height:auto;border-radius:4px"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;color:rgba(0,0,0,.55);text-align:center;margin-top:8px">Caixin Weekly · Jan 2020</span><span style="position:absolute;top:100%;left:50%;transform:translateX(-50%);border:7px solid transparent;border-top-color:#fff"></span></span></sc-if></span>. Somewhere along the way I grew wary of the next big bet. I’ve stood on the front line of the <span style="position:relative;display:inline-block"><span onClick="{{ toggleCrash }}" title="psst — click me" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;text-decoration-color:#c6400d">collapse</span><sup style="font-size:.5em">4</sup><sc-if value="{{ crashOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:50%;bottom:calc(100% + 14px);transform:translateX(-50%);width:300px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:10px;box-shadow:0 16px 40px rgba(0,0,0,.4);z-index:40"><span onClick="{{ toggleCrash }}" style="position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:#1b1714;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3)">×</span><img src="uploads/wsj-collapse.jpg" alt="WSJ breaking news" style="display:block;width:100%;height:auto;border-radius:4px"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;color:rgba(0,0,0,.55);text-align:center;margin-top:8px">WSJ · Mar 2020 · circuit-breaker halt</span><span style="position:absolute;top:100%;left:50%;transform:translateX(-50%);border:7px solid transparent;border-top-color:#fff"></span></span></sc-if></span>, and watched where the money ran<sup style="font-size:.5em">5</sup>.</p>
           <p style="font-size:27px;line-height:1.36;margin:0;color:#1b1714;text-wrap:pretty">So now I question what everyone agrees on<sup style="font-size:.5em">6</sup>. That’s usually where the real risk is hiding.</p>
@@ -69,7 +109,7 @@
 
       <!-- footnotes band -->
       <div style="border-top:1px solid rgba(0,0,0,.4);padding-top:26px;position:relative">
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);column-gap:48px;row-gap:24px;align-items:start;max-width:1180px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);column-gap:48px;row-gap:24px;align-items:start;max-width:1180px" class="sc-foot">
           <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:#3a342d"><b style="color:#1b1714">1.</b>&nbsp; <span style="color:#1b1714">UCSB.</span> arrived in California at 18.</div>
           <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:#3a342d"><b style="color:#1b1714">2.</b>&nbsp; <span style="color:#1b1714">New York.</span> Σ deals &gt; $5B</div>
           <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:#3a342d"><b style="color:#1b1714">3.</b>&nbsp; <span style="color:#1b1714">Beijing.</span> signal = ∫ noise · dt</div>
@@ -83,82 +123,97 @@
 
     <!-- ---------- SECTION 2 : WRITING ---------- -->
     <section ref="{{ writingRef }}" data-section="writing" data-screen-label="02 Writing" style="min-height:100vh;background:#fff;padding:62px 76px 64px;display:flex;flex-direction:column">
-      <div style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
-      <div class="led-row" style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:30px">
+      <div class="sc-strip" style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
+      <div class="led-row sec-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-bottom:8px">
         <h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:74px;letter-spacing:-.01em;margin:0">Writing</h1>
-        <span class="sec-tag" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.13em;color:#a39a8e">ESSAYS &amp; MEMOS / SECTION 02</span>
+        <span class="sec-tag" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.13em;color:#a39a8e;white-space:nowrap;margin-top:10px">ESSAYS &amp; MEMOS / SECTION 02</span>
       </div>
-      <div style="display:grid;grid-template-columns:34px 1fr 96px 150px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.13em;color:rgba(0,0,0,.5);padding:0 6px 8px;border-bottom:1px solid rgba(0,0,0,.42)">
-        <span>№</span><span>PIECE</span><span>YEAR</span><span>WHERE</span>
-      </div>
-      <sc-for list="{{ writing }}" as="item" hint-placeholder-count="5">
-        <div class="led-row" style="display:grid;grid-template-columns:34px 1fr 96px 150px;align-items:center;padding:18px 6px;border-bottom:1px solid rgba(0,0,0,.12);cursor:pointer;transition:background .15s,padding-left .15s" style-hover="background:rgba(0,0,0,.04);padding-left:14px">
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.45)">{{ item.n }}</span>
-          <span style="display:flex;flex-direction:column;gap:3px;padding-right:24px">
-            <span style="font-size:26px;line-height:1.08">{{ item.title }}</span>
-            <span style="font-size:14px;color:rgba(0,0,0,.55);line-height:1.3">{{ item.desc }}</span>
-          </span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.6)">{{ item.year }}</span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.6);text-transform:uppercase;letter-spacing:.04em">{{ item.where }}</span>
-        </div>
-      </sc-for>
-    </section>
-
-    <!-- ---------- SECTION 3 : DEALS ---------- -->
-    <section ref="{{ dealsRef }}" data-section="deals" data-screen-label="03 Deals" style="min-height:100vh;background:#fff;padding:62px 76px 64px;display:flex;flex-direction:column">
-      <div style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
-      <div class="led-row" style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:30px">
-        <h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:74px;letter-spacing:-.01em;margin:0">Deals</h1>
-        <span class="sec-tag" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.13em;color:#a39a8e">TRANSACTIONS / SECTION 03</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:24px;max-width:1180px">
-        <sc-for list="{{ deals }}" as="item" hint-placeholder-count="4">
-          <div class="led-row" style="border:1px solid rgba(0,0,0,.14);padding:30px 32px 28px;display:flex;flex-direction:column;cursor:pointer;transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .22s ease" style-hover="transform:translateY(-5px);box-shadow:0 20px 44px rgba(0,0,0,.11)">
-            <div style="display:flex;justify-content:space-between;align-items:baseline">
-              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.42);letter-spacing:.1em">{{ item.n }}</span>
-              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.55);letter-spacing:.05em;text-transform:uppercase">{{ item.role }} · {{ item.year }}</span>
-            </div>
-            <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:52px;letter-spacing:-.02em;line-height:1;margin:20px 0 8px">{{ item.value }}</div>
-            <div style="font-size:28px;line-height:1.1;margin-bottom:12px">{{ item.title }}</div>
-            <div style="font-size:15px;line-height:1.45;color:rgba(0,0,0,.6);text-wrap:pretty">{{ item.desc }}</div>
+      <!-- staggered horizontal gallery -->
+      <div style="flex:1;display:flex;align-items:flex-end;gap:34px;overflow-x:auto;overflow-y:hidden;padding:40px 4px 20px;margin:0 -4px">
+        <sc-for list="{{ writing }}" as="item" hint-placeholder-count="5">
+          <div onClick="{{ item.onClick }}" class="led-row" style="flex:none;width:264px;align-self:flex-start;margin-top:{{ item.offset }};cursor:{{ item.cursor }};transition:transform .25s cubic-bezier(.2,.7,.3,1)" style-hover="{{ item.hover }}">
+            <div style="font-size:21px;line-height:1.15;color:#1b1714">{{ item.title }}</div>
+            <div style="font-size:14px;line-height:1.35;color:rgba(0,0,0,.5);margin:5px 0 16px">{{ item.desc }}</div>
+            <image-slot id="{{ item.slot }}" shape="rounded" radius="4" placeholder="cover" style="display:block;width:100%;height:328px;background:{{ item.cover }};box-shadow:0 8px 24px rgba(0,0,0,.1)"></image-slot>
           </div>
         </sc-for>
       </div>
     </section>
 
+    <!-- ---------- SECTION 3 : DEALS ---------- -->
+    <section ref="{{ dealsRef }}" data-section="deals" data-screen-label="03 Deals" style="min-height:100vh;background:#d9481f;padding:62px 76px 64px;display:flex;flex-direction:column">
+      <div class="sc-strip" style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
+      <div class="led-row sec-head" style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:30px">
+        <h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:74px;letter-spacing:-.01em;margin:0;color:#fbeee6">Deals</h1>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.13em;color:rgba(251,238,230,.8)">TRANSACTIONS / SECTION 03</span>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;color:rgba(251,238,230,.72);margin-bottom:26px" class="led-row">HOVER A SPINE TO PULL THE MAGAZINE FROM THE SHELF · SCROLL FOR MORE</div>
+      <div class="deal-scroll" style="margin:0 -76px">
+        <div class="deal-track" style="padding:14px 76px 44px">
+          <sc-for list="{{ dealSpines }}" as="item" hint-placeholder-count="4">
+            <div class="dspine" onMouseEnter="{{ spineSound }}" style="background:#f6f1e4;color:#c33f18;box-shadow:inset 0 0 0 1px rgba(120,30,12,.16),inset -7px 0 13px -7px rgba(120,30,12,.28),2px 0 7px rgba(120,30,12,.14);transform:rotate({{ item.tilt }})">
+              <div class="dspine-closed">
+                <div style="position:absolute;inset:0;background-image:repeating-linear-gradient(0deg,rgba(120,30,12,.04) 0 2px,transparent 2px 4px);pointer-events:none"></div>
+                <div style="position:absolute;top:0;left:0;right:0;height:5px;background:{{ item.bg }}"></div>
+                <div style="position:absolute;bottom:0;left:0;right:0;height:5px;background:{{ item.bg }}"></div>
+                <div style="position:absolute;inset:52px 11px;border:1px solid rgba(195,63,24,.3);pointer-events:none"></div>
+                <div style="position:absolute;inset:55px 14px;border:1px solid rgba(195,63,24,.15);pointer-events:none"></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:10px;z-index:1;margin-top:4px">
+                  <span style="font-family:'Newsreader',Georgia,serif;font-size:15px;line-height:1;color:#c33f18">&#10056;</span>
+                  <span style="writing-mode:vertical-rl;text-orientation:mixed;font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:.24em;text-transform:uppercase;color:rgba(195,63,24,.64)">{{ item.role }} &#183; {{ item.year }}</span>
+                </div>
+                <span class="dspine-title" style="z-index:1">{{ item.title }}</span>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:9px;z-index:1;margin-bottom:4px">
+                  <span style="font-family:'Newsreader',Georgia,serif;font-style:italic;font-size:18px;color:#c33f18">{{ item.value }}</span>
+                  <span style="width:34px;height:15px;background:repeating-linear-gradient(90deg,#c33f18 0 1px,transparent 1px 3px);display:block;opacity:.72"></span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:7.5px;letter-spacing:.22em;text-transform:uppercase;color:rgba(195,63,24,.7)">Cara Zhou</span>
+                </div>
+              </div>
+              <div class="dspine-open">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:rgba(195,63,24,.72)">№ {{ item.n }} · {{ item.role }} · {{ item.year }}</div>
+                <div>
+                  <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:72px;letter-spacing:-.02em;line-height:.9;color:#c33f18">{{ item.value }}</div>
+                  <div style="font-family:'Newsreader',Georgia,serif;font-size:29px;line-height:1.05;margin-top:9px;color:#1b1714">{{ item.title }}</div>
+                </div>
+                <div style="font-size:15px;line-height:1.5;color:#3a2a20;text-wrap:pretty">{{ item.desc }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
     <!-- ---------- SECTION 4 : AI PROJECTS ---------- -->
     <section ref="{{ aiRef }}" data-section="ai" data-screen-label="04 AI Projects" style="min-height:100vh;background:#fff;padding:62px 76px 64px;display:flex;flex-direction:column">
-      <div style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
-      <div class="led-row" style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:30px">
-        <h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:74px;letter-spacing:-.01em;margin:0">AI Projects</h1>
-        <span class="sec-tag" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.13em;color:#a39a8e">BUILD LOG / SECTION 04</span>
+      <div class="sc-strip" style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
+      <div class="led-row sec-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-bottom:8px">
+        <h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:clamp(34px,4vw,56px);line-height:1.05;letter-spacing:-.015em;margin:0;max-width:900px">Tools that I wanted in my personal life, so I built:</h1>
+        <span class="sec-tag" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.13em;color:#a39a8e;white-space:nowrap;margin-top:14px">BUILD LOG / SECTION 04</span>
       </div>
-      <div style="display:grid;grid-template-columns:34px 1fr 170px 160px 64px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.13em;color:rgba(0,0,0,.5);padding:0 6px 8px;border-bottom:1px solid rgba(0,0,0,.42)">
-        <span>№</span><span>BUILD</span><span>STACK</span><span>STATUS</span><span>YEAR</span>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:clamp(40px,6vw,96px);flex-wrap:wrap;padding:30px 0">
+        <sc-for list="{{ ai }}" as="item" hint-placeholder-count="3">
+          <div onClick="{{ item.onClick }}" class="led-row" style="position:relative;flex:none;width:236px;height:372px;cursor:{{ item.cursor }};transition:transform .3s cubic-bezier(.2,.7,.3,1)" style-hover="{{ item.hover }}">
+            <image-slot id="{{ item.slot }}" shape="rounded" radius="6" placeholder="{{ item.ph }}" style="display:block;width:100%;height:100%;background:{{ item.cover }};box-shadow:0 10px 30px rgba(0,0,0,.13)"></image-slot>
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 14px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:16px;letter-spacing:.08em;color:{{ item.labelColor }};text-shadow:0 1px 10px rgba(0,0,0,.25)">{{ item.label }}</span>
+              <sc-if value="{{ item.soon }}" hint-placeholder-val="{{ false }}">
+                <span style="font-family:'Newsreader',Georgia,serif;font-style:italic;font-size:15px;color:rgba(255,255,255,.85);margin-top:8px">coming soon</span>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
       </div>
-      <sc-for list="{{ ai }}" as="item" hint-placeholder-count="4">
-        <div class="led-row" style="display:grid;grid-template-columns:34px 1fr 170px 160px 64px;align-items:center;padding:18px 6px;border-bottom:1px solid rgba(0,0,0,.12);cursor:pointer;transition:background .15s,padding-left .15s" style-hover="background:rgba(0,0,0,.04);padding-left:14px">
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.45)">{{ item.n }}</span>
-          <span style="display:flex;flex-direction:column;gap:3px;padding-right:24px">
-            <span style="font-size:26px;line-height:1.08">{{ item.title }}</span>
-            <span style="font-size:14px;color:rgba(0,0,0,.55);line-height:1.3">{{ item.desc }}</span>
-          </span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.6);text-transform:uppercase;letter-spacing:.04em">{{ item.stack }}</span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.6)">{{ item.status }}</span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.6)">{{ item.year }}</span>
-        </div>
-      </sc-for>
     </section>
 
     <!-- ---------- SECTION 5 : SOCIAL (Xiaohongshu) ---------- -->
     <section ref="{{ readingRef }}" data-section="reading" data-screen-label="05 Social" style="min-height:100vh;background:#FBF7F0;padding:62px 76px 64px;display:flex;flex-direction:column">
-      <div style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
-      <div class="led-row" style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
+      <div class="sc-strip" style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
+      <div class="led-row sec-head" style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
         <h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:74px;letter-spacing:-.01em;margin:0">Social</h1>
         <span class="sec-tag" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.13em;color:#a39a8e">小红书 · XIAOHONGSHU / SECTION 05</span>
       </div>
       <p class="led-row" style="font-size:19px;line-height:1.5;color:#5a534a;max-width:560px;margin:0 0 36px;text-wrap:pretty">Notes on operating, AI, and taste — what I post for <span style="color:#c6400d">@xiaotong</span>. Drop your post covers into the cards.</p>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:22px;max-width:1180px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:22px;max-width:1180px" class="sc-social">
         <sc-for list="{{ social }}" as="item" hint-placeholder-count="8">
           <div class="led-row" style="display:flex;flex-direction:column;cursor:pointer;transition:transform .2s ease" style-hover="transform:translateY(-5px)">
             <image-slot id="{{ item.slot }}" shape="rounded" radius="12" placeholder="cover" style="display:block;width:100%;aspect-ratio:3/4;background:#fff;box-shadow:0 6px 18px rgba(0,0,0,.08)"></image-slot>
@@ -174,16 +229,16 @@
 
     <!-- ---------- SECTION 6 : OUTTAKES ---------- -->
     <section ref="{{ objectsRef }}" data-section="objects" data-screen-label="06 Outtakes" style="min-height:100vh;background:#C2562B;padding:62px 76px 76px;position:relative;overflow:hidden">
-      <div style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
-      <div class="led-row" style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-bottom:10px">
+      <div class="sc-strip" style="height:20px;margin:-62px -76px 44px;background:#1b1714;display:flex;align-items:center;overflow:hidden"><div style="flex:1;height:8px;margin:0 10px;background-image:repeating-linear-gradient(90deg,#f1ede0 0 12px,transparent 12px 26px)"></div></div>
+      <div class="led-row sec-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-bottom:10px">
         <h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:74px;line-height:1;font-weight:400;letter-spacing:-.01em;color:#1b1714;margin:0">Outtakes</h1>
-        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;color:rgba(0,0,0,.55);white-space:nowrap;margin-top:10px">OFF THE REEL / SECTION 06</span>
+        <span class="sec-tag" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;color:rgba(0,0,0,.55);white-space:nowrap;margin-top:10px">OFF THE REEL / SECTION 06</span>
       </div>
       <p class="led-row" style="font-style:italic;font-size:30px;line-height:1.26;color:#1b1714;max-width:760px;margin:0 0 50px;text-wrap:pretty">“I told my banker friends I started doing stand-up. They said: finally, a pitch with a punchline.”</p>
 
       <!-- STAND-UP -->
       <div class="led-row" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;color:rgba(0,0,0,.6);border-bottom:1px solid rgba(0,0,0,.4);padding-bottom:8px;margin-bottom:22px">STAND-UP · SETS &amp; CLIPS</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;max-width:1180px;margin-bottom:58px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;max-width:1180px;margin-bottom:58px" class="sc-standup">
         <sc-for list="{{ standup }}" as="item" hint-placeholder-count="3">
           <div class="led-row" style="display:flex;flex-direction:column;cursor:pointer;transition:transform .2s ease" style-hover="transform:translateY(-5px)">
             <div style="position:relative;width:100%;aspect-ratio:16/10">
@@ -203,15 +258,15 @@
           <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;color:rgba(0,0,0,.55)">20 OBJECTS</span>
         </div>
         <sc-for list="{{ indexItems }}" as="item" hint-placeholder-count="10">
-          <div onMouseEnter="{{ item.onEnter }}" style="display:grid;grid-template-columns:34px 1fr 130px 70px 188px;align-items:center;padding:13px 6px;border-bottom:1px solid rgba(0,0,0,.18);cursor:pointer;transition:background .15s,padding-left .15s" style-hover="background:rgba(0,0,0,.07);padding-left:14px">
+          <div onMouseEnter="{{ item.onEnter }}" class="sc-objrow" style="display:grid;grid-template-columns:34px 1fr 130px 70px 188px;align-items:center;padding:13px 6px;border-bottom:1px solid rgba(0,0,0,.18);cursor:pointer;transition:background .15s,padding-left .15s" style-hover="background:rgba(0,0,0,.07);padding-left:14px">
             <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.5)">{{ item.n }}</span>
             <span style="display:flex;flex-direction:column;gap:2px;padding-right:18px">
               <span style="font-size:21px;color:#1b1714;line-height:1.1">{{ item.title }}</span>
               <span style="font-size:13px;color:rgba(0,0,0,.6);line-height:1.25">{{ item.desc }}</span>
             </span>
-            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.62)">{{ item.dim }}</span>
-            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.62)">{{ item.year }}</span>
-            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.62);text-transform:uppercase;letter-spacing:.04em">{{ item.mat }}</span>
+            <span class="obj-meta" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.62)">{{ item.dim }}</span>
+            <span class="obj-meta" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.62)">{{ item.year }}</span>
+            <span class="obj-meta" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.62);text-transform:uppercase;letter-spacing:.04em">{{ item.mat }}</span>
           </div>
         </sc-for>
         <div style="{{ pvStyle }}">
@@ -235,6 +290,127 @@
     </section>
 
   </main>
+
+  <!-- ===================== ESSAY READER ===================== -->
+  <sc-if value="{{ readerOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:90;background:#fbf3df;overflow-y:auto">
+      <div onClick="{{ closeReader }}" style="position:fixed;top:22px;right:26px;width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.06);display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#15130e;z-index:3" style-hover="background:rgba(0,0,0,.12)">×</div>
+      <!-- ===== CHARTFORGE (PDF → Excel) ===== -->
+      <sc-if value="{{ rChartforge }}" hint-placeholder-val="{{ false }}">
+        <chartforge-app style="position:fixed;inset:0;z-index:1"></chartforge-app>
+      </sc-if>
+      <!-- ===== BLOOM (WebGL flower) ===== -->
+      <sc-if value="{{ rBloom }}" hint-placeholder-val="{{ false }}">
+        <div style="position:fixed;inset:0;background:#fff">
+          <bloom-canvas style="position:absolute;inset:0"></bloom-canvas>
+          <div style="position:absolute;top:clamp(20px,4vw,46px);left:clamp(20px,4vw,46px);max-width:330px;z-index:4;pointer-events:none">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#b9b0a2">Botanic Garden · 2026</div>
+            <h2 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:clamp(26px,3vw,34px);line-height:1.08;letter-spacing:-.015em;color:#1b1714;margin:13px 0 0">Reviving Georgia O’Keeffe’s flowers, in code.</h2>
+            <p style="font-size:15.5px;line-height:1.5;color:#6a6357;margin:14px 0 0;text-wrap:pretty">A living WebGL bloom — petals unfurling on a phyllotaxis spiral, drawn in her palettes. Click the flower to watch it open again; switch palettes and tune the bloom below.</p>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#9a9182;margin:16px 0 0">Bloom engine inspired by <a href="https://github.com/whitecat-captain/bloom-animation" target="_blank" rel="noopener" style="color:#c6400d;text-decoration:none;border-bottom:1px solid rgba(198,64,13,.45);pointer-events:auto">whitecat-captain / bloom-animation ↗</a></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== INTERACTIVE PROJECT VIEW (single column) ===== -->
+      <sc-if value="{{ rDealAgent }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:1040px;margin:0 auto;padding:clamp(54px,8vh,100px) clamp(28px,5vw,64px) 110px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#a59c87">PROJECT &#183; {{ rDate }}</div>
+          <h1 style="font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:clamp(34px,4.4vw,52px);line-height:1.05;letter-spacing:-.02em;margin:18px 0 0;color:#1b1714">{{ rTitle }}</h1>
+          <p style="font-size:clamp(17px,1.7vw,20px);line-height:1.5;color:#5a5246;max-width:640px;margin:22px 0 0;text-wrap:pretty">{{ rDesc }}</p>
+          <a href="{{ rUrl }}" target="_blank" rel="noopener" style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.04em;color:#c6400d;text-decoration:none;border-bottom:1px solid #c6400d;padding-bottom:2px;margin-top:18px">{{ rLinkLabel }}</a>
+
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:clamp(36px,5vw,56px)">
+            <input ref="{{ dealRef }}" onKeyDown="{{ dealKey }}" placeholder="Cursor, Glean, Harvey, Ramp, Hebbia…" style="flex:1;min-width:260px;font-family:'IBM Plex Mono',monospace;font-size:16px;color:#1b1714;background:#fffdf7;border:1px solid rgba(0,0,0,.22);border-radius:8px;padding:17px 20px;outline:none" style-focus="border-color:#1b1714" />
+            <button onClick="{{ runDeal }}" style="font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:14px;letter-spacing:.04em;color:#fbf3df;background:#1b1714;border:none;border-radius:8px;padding:0 32px;height:58px;cursor:pointer" style-hover="background:#c6400d">research →</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;margin-top:12px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#a59c87;white-space:nowrap">api key</span>
+            <input type="password" ref="{{ keyRef }}" onInput="{{ saveKey }}" placeholder="sk-ant-… (optional — stays in your browser, never sent anywhere else)" style="flex:1;min-width:220px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#5a5246;background:#f1ede0;border:1px solid rgba(0,0,0,.08);border-radius:8px;padding:13px 16px;outline:none" />
+          </div>
+
+          <sc-if value="{{ dealLoading }}" hint-placeholder-val="{{ false }}">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#8a5a32;margin-top:30px">Researching\u2026 drafting the memo.</div>
+          </sc-if>
+          <sc-if value="{{ dealError }}" hint-placeholder-val="{{ false }}">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#c0392b;margin-top:30px">{{ dealError }}</div>
+          </sc-if>
+
+          <sc-if value="{{ hasMemo }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:36px;background:#fffdf7;border:1px solid rgba(0,0,0,.16);border-radius:10px;padding:28px 30px;max-width:820px">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap">
+                    <div>
+                      <div style="font-size:26px;line-height:1.1;color:#1b1714">{{ dmCompany }}</div>
+                      <div style="font-size:15px;color:rgba(0,0,0,.6);margin-top:4px;max-width:460px">{{ dmTagline }}</div>
+                    </div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;color:#fff;background:{{ dmVerdictColor }};border-radius:20px;padding:6px 13px;white-space:nowrap">{{ dmVerdictLabel }}</div>
+                  </div>
+                  <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:14px">
+                    <sc-for list="{{ dmBadges }}" as="b" hint-placeholder-count="3">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.05em;color:#3a342d;border:1px solid rgba(0,0,0,.25);border-radius:20px;padding:4px 11px">{{ b }}</span>
+                    </sc-for>
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:20px">
+                    <sc-for list="{{ dmMetrics }}" as="m" hint-placeholder-count="4">
+                      <div style="border:1px solid rgba(0,0,0,.14);border-radius:6px;padding:11px 14px">
+                        <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(0,0,0,.45)">{{ m.label }}</div>
+                        <div style="font-size:18px;color:#1b1714;margin-top:3px">{{ m.value }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-for list="{{ dmSections }}" as="s" hint-placeholder-count="4">
+                    <div style="margin-top:18px">
+                      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a5a32;margin-bottom:5px">{{ s.label }}</div>
+                      <div style="font-size:16px;line-height:1.55;color:#2a241a">{{ s.body }}</div>
+                    </div>
+                  </sc-for>
+                  <div style="margin-top:18px">
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a5a32;margin-bottom:7px">Competitors</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:7px">
+                      <sc-for list="{{ dmCompetitors }}" as="c" hint-placeholder-count="3">
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.6);background:#f1ede0;border-radius:20px;padding:4px 12px">{{ c }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div style="margin-top:18px">
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a5a32;margin-bottom:5px">IB valuation view</div>
+                    <div style="font-size:16px;line-height:1.55;color:#2a241a">{{ dmValuation }}</div>
+                  </div>
+                  <sc-if value="{{ dmHasChina }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-top:18px;background:#f6efe0;border:1px solid rgba(138,90,50,.3);border-radius:6px;padding:14px 16px">
+                      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a5a32;margin-bottom:5px">\u4e2d\u56fd China angle</div>
+                      <div style="font-size:16px;line-height:1.55;color:#2a241a">{{ dmChina }}</div>
+                    </div>
+                  </sc-if>
+                  <div style="margin-top:18px;border-top:1px solid rgba(0,0,0,.14);padding-top:16px">
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a5a32;margin-bottom:6px">Verdict</div>
+                    <div style="font-size:16px;line-height:1.55;color:#2a241a">{{ dmVerdictReason }}</div>
+                  </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- ===== ESSAY VIEW (two column) ===== -->
+      <sc-if value="{{ rEssay }}" hint-placeholder-val="{{ true }}">
+      <div class="sc-reader-grid" style="display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:clamp(30px,5vw,80px);max-width:1320px;margin:0 auto;padding:clamp(40px,6vh,86px) clamp(28px,5vw,72px) 100px">
+        <!-- title column -->
+        <div class="sc-reader-title" style="align-self:start;position:sticky;top:clamp(40px,6vh,86px)">
+          <h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:clamp(38px,3.6vw,54px);line-height:1.04;letter-spacing:-.02em;margin:0;color:#1b1714">{{ rTitle }}</h1>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#9a8f78;margin-top:18px">{{ rDate }}</div>
+          <a href="{{ rUrl }}" target="_blank" rel="noopener" style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.04em;color:#c6400d;text-decoration:none;border-bottom:1px solid #c6400d;padding-bottom:2px;margin-top:24px">{{ rLinkLabel }}</a>
+        </div>
+        <!-- article column -->
+        <article style="max-width:760px">
+          <image-slot id="{{ rHeroSlot }}" shape="rounded" radius="2" placeholder="engraving / cover" style="display:block;width:100%;height:clamp(300px,42vh,560px);background:linear-gradient(160deg,#e8e0cc,#d8cfb6);box-shadow:0 2px 0 rgba(0,0,0,.06);margin-bottom:42px"></image-slot>
+          <sc-for list="{{ rBody }}" as="para" hint-placeholder-count="6">
+            <p style="{{ para.style }}">{{ para.text }}</p>
+          </sc-for>
+        </article>
+      </div>
+      </sc-if>
+    </div>
+  </sc-if>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script>
@@ -248,34 +424,122 @@ class Component extends DCLogic {
     this.readingRef = React.createRef();
     this.objectsRef = React.createRef();
     this.scrollRef = React.createRef();
-    this.state = { active:'about', babyOpen:false, newsOpen:false, crashOpen:false, redOpen:false, surfOpen:false, snowOpen:false, tennisOpen:false, pv:{ visible:false, x:560, y:420, i:0 } };
+    this.state = { active:'about', babyOpen:false, newsOpen:false, crashOpen:false, redOpen:false, surfOpen:false, snowOpen:false, tennisOpen:false, reader:null, dealLoading:false, dealMemo:null, dealError:'', pv:{ visible:false, x:560, y:420, i:0 } };
+    this.dealRef = React.createRef();
+    this.keyRef = React.createRef();
+    this.dealVpRef = React.createRef();
+    this.dealTrackRef = React.createRef();
     this._order = ['about','writing','deals','ai','reading','objects'];
     this._ratios = {};
   }
 
+  formatBody(arr){
+    if(!arr) return [];
+    return arr.map((raw)=>{
+      let text = raw, style;
+      if(raw.indexOf('\u00a7 ')===0){
+        text = raw.slice(2);
+        style = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", fontWeight:'400', fontSize:'15px', letterSpacing:'.08em', textTransform:'uppercase', color:'#8a5a32', margin:'42px 0 18px', paddingBottom:'8px', borderBottom:'1px solid rgba(0,0,0,.18)' };
+      } else if(raw.charAt(0)==='\u201c' && raw.charAt(raw.length-1)==='\u201d'){
+        style = { fontFamily:"'Newsreader',Georgia,serif", fontStyle:'italic', fontSize:'18px', lineHeight:'1.6', color:'#4a4234', margin:'0 0 26px', padding:'4px 0 4px 22px', borderLeft:'2px solid rgba(0,0,0,.3)', textWrap:'pretty' };
+      } else {
+        style = { fontFamily:"'Newsreader',Georgia,serif", fontSize:'19px', lineHeight:'1.7', color:'#2a241a', margin:'0 0 26px', textWrap:'pretty' };
+      }
+      return { text, style };
+    });
+  }
+
   get writing(){
     return [
-      { n:'01', title:'The Series B Memo', desc:'A thesis on AI infrastructure — and the risk section that held up.', year:'2024', where:'Internal' },
-      { n:'02', title:'Folk Theory of Markets', desc:'How informal mental models move prices. My most-read piece.', year:'2023', where:'Substack' },
-      { n:'03', title:'Red Team', desc:'A devil\u2019s-advocate teardown of a hot AI deal, argued in good faith.', year:'2024', where:'Internal' },
-      { n:'04', title:'The Topeka Note', desc:'A book-club essay that turned into a small talk series.', year:'2024', where:'Talk' },
-      { n:'05', title:'Buffett Files', desc:'An annotated study of capital allocation, written for myself.', year:'2022', where:'Personal' }
+      { slot:'w-memo', title:'Broker-First SMB Lending', desc:'A market thesis memo \u2014 why the broker workflow layer, not faster underwriting, is the durable bet in sub-$1M SMB lending.', date:'2025', offset:'24px', cover:'linear-gradient(180deg,#1b2a3f,#3a4a5e 55%,#8a7a5e)', url:'uploads/SMB%20Lending%20Market%20Thesis%20Memo.pdf', linkLabel:'Read the full memo (PDF) \u2197', body:[
+        'SMB lending has resisted aggregation for decades because origination is hyper-local, trust-based, and runs through brokers. That structural reality hasn\u2019t changed. What has changed is that agentic AI can now collapse the underwriting workflow from days to minutes \u2014 making it possible to build a product brokers rely on for every deal.',
+        '\u00a7 The thesis',
+        'Daily reliance creates behavioral lock-in: the routing history and lender relationships a broker builds inside the platform don\u2019t transfer when they leave. That history generates decision data, and decision data \u2014 accumulated across thousands of loans and dozens of lender types \u2014 becomes a credit intelligence asset no competitor can replicate without starting over. This is the Salesforce dynamic applied to SMB lending, and it has not yet been claimed at scale.',
+        'Kaaj, a seed-stage company that raised $3.8M in November 2025, is the most compelling early proof of concept. Founded in 2024 by Utsav Shah (Uber, Cruise) and Shivi Sharma (American Express, Varo), it has processed over $5 billion in loan applications in under two years. This isn\u2019t a recommendation to invest in Kaaj directly \u2014 it\u2019s a recommendation to treat this as a category worth incubating, because the window to establish a position is open now and won\u2019t stay open indefinitely.',
+        '\u00a7 The problem: it\u2019s origination, not underwriting',
+        'The standard story is that underwriting a $300K loan costs nearly as much as a $3M loan. True, but second-order. On a $300K loan at 12% over three years a lender earns roughly $36K gross; cost of funds, expected loss, and servicing consume most of it, leaving a $2\u20134K window of underwriting labor where automation can operate. Shaving $2\u20134K off a $36K loan makes a thin business slightly less thin \u2014 it doesn\u2019t transform the economics.',
+        'The first-order problem is that small business lending has no natural aggregation point on the demand side. Owners find lenders through flyers, accountant referrals, and word of mouth. Only 41% of applicants get the full financing they need; 24% walk away with nothing. The capital gap isn\u2019t a discovery problem \u2014 a better UI won\u2019t fix it. It\u2019s an origination problem.',
+        'The routing mechanism that already works is the broker. Non-bank lenders now account for 42% of US small business financing, and the broker channel is their primary deal flow. The bottleneck is simple: every hour a broker spends pulling documents and assembling a credit package is an hour not spent finding the next deal.',
+        '\u00a7 Why now',
+        'Two things changed. First, agentic AI can finally orchestrate the full underwriting chain end to end \u2014 ingestion, KYB/KYC, cash-flow analysis, risk, decision-ready output \u2014 eliminating the handoffs between point solutions like Ocrolus and Middesk that constitute most of the delay. Second, the economics of SMB lending have become more demanding and more fragile: post-COVID EIDL debt is in active repayment, and spreads on sub-$1M loans remain compressed. Lenders who could afford slow manual underwriting when money was cheap no longer can.',
+        '\u00a7 The data moat',
+        'Salesforce became defensible by becoming the system sales teams lived in every day; Toast did the same for restaurants and built Toast Capital on the transaction data. The workflow business is the entry point to the data business. When credit officers decide inside the platform, those decisions stay \u2014 and across thousands of loans they become something no competitor can buy or reconstruct. FICO was built on decades of consumer credit decisions; the commercial equivalent for sub-$1M lending has never existed because no platform has sat at the right layer to capture it.',
+        '\u00a7 The competitive landscape',
+        'The market is crowded at the document-processing layer and largely empty at the workflow and relationship layers. Ocrolus chose enterprise, Middesk chose compliance, Zest AI chose consumer credit; Casca and Taktile lead with speed and sell to banks and large fintechs. Every one of them leads with \u201cfaster\u201d \u2014 and faster underwriting is a product improvement, not a durable position. None has built for the independent lender and broker segment. That gap is the bet.',
+        '\u00a7 The risks',
+        'Margin improvement per loan is modest \u2014 the stronger case is capacity, letting lenders process deals they previously couldn\u2019t. At $5B processed and four people, the credit dataset is promising but not yet defensible; the first mover has to accumulate broker relationships faster than any enterprise player can pivot. And AI-assisted credit decisions invite CFPB scrutiny, so the platform must preserve the human decision layer.',
+        '\u00a7 What to do',
+        'The company that owns the broker\u2019s daily underwriting workflow will own the category. Primary Labs has two paths: back Kaaj at the Series A once the open questions are answered \u2014 does the platform capture credit-officer decisions, does broker retention hold, how deep is the lender network behind each broker \u2014 or build the company that answers them by design from day one. The broker-first aggregation thesis is not yet consensus; most observers still frame this as a document-processing problem. That misread is the opportunity.'
+      ] },
+      { slot:'w-2', title:'Time is non-linear.', desc:'I started to feel it this year.', date:'Jun 2026', offset:'0px', cover:'linear-gradient(180deg,#3b5a72,#7a8a8c 55%,#c8b48f)', url:'https://carazhou.substack.com/p/time-is-non-linear', body:[
+        'I started to feel it this year. Not as a theory, but as something that happens in the body.',
+        'This afternoon, I lit a cigarette while waiting for the bus. Spotify shuffled to \u201cBibo No Aozora.\u201d The light had that late-day softness that makes everything look briefly forgivable. Edges loosening, shadows stretching just enough to blur what\u2019s fixed. I stood there longer than I needed to. For a moment, time didn\u2019t move forward. It widened.',
+        '\u2014 Edward Hopper, Rooms by the Sea',
+        'I wasn\u2019t 27 on a New York sidewalk. I was 12, lying on the tiled balcony in China, the heat pressing up through the floor into my back. I was 35, maybe 40, sitting in a quiet garden I don\u2019t recognize yet, sipping tea from a handmade cup. I was 70, eyes closed, smiling faintly at the sound of a distant song.',
+        'I drifted, sideways into memory, forward into possibility. The present became elastic. And I understood something: that not all moments live on a timeline. Some moments become portals.',
+        'Finally, the bus came. I checked the time. Only 10 minutes had passed.',
+        'I\u2019ve read, vaguely, that before a system is measured, it exists in more than one state at once, uncollapsed. I don\u2019t really understand the physics. But standing there, it felt like my life had loosened its grip on sequence. 12, 40, and 70 were all available, all equally near, as if they occupied the same coordinates and only needed something to fix them in place.',
+        'Looking down at the screen did that. The light was cold, definite. It pulled everything back into order.'
+      ] },
+      { slot:'w-4z', title:'The Depth of the Optimization Is the Depth of the Trap', desc:'The U.S. and China each built the perfect machine for the last era they won. How about the AI era?', date:'Jun 2026', offset:'56px', cover:'linear-gradient(180deg,#2b3a4a,#7a6f5e 55%,#b5481f)', url:'https://carazhou.substack.com/p/the-depth-of-the-optimization-is', body:[
+        'The better a system is optimized for one paradigm, the harder it traps you when the next one shows up.',
+        'I kept thinking about this when I traveled back to China a few weeks ago for my dad\u2019s surgery. After almost four years in New York, I\u2019d forgotten what a \u201cgood\u201d train (subway) feels like: how fast it moves, how I could sit there with full internet, and talk via the phone without interruptions. The easy read is that China\u2019s infrastructure is ahead, and New York is behind. But it isn\u2019t that simple, because New York City\u2019s trains were once the best in the world. China could build the newest system precisely because it wasn\u2019t dragging an old one behind it.',
+        '\u201cWhen Li Hongzhang, the most powerful statesman of the late Qing dynasty and the man chiefly responsible for trying to drag China into the industrial age, arrived in New York in late August 1896, what struck him most was the skyscrapers. Asked what he liked best in America, he said he admired everything but was most astonished by the tall buildings: he\u2019d never seen anything twenty stories or higher in China or in Europe. He added a characteristically practical caveat, that China couldn\u2019t build them because typhoons would knock them down, and that they\u2019d be unlivable without reliable elevators. The remarks ran in a New York Times interview on September 3, 1896.\u201d',
+        'History keeps doing this. Britain industrialized first and then got stuck. Its factories, railways, and financial systems fit the first industrial revolution so well they couldn\u2019t bend toward the next one. Germany and the U.S. started later, with nothing to protect, and pulled ahead in steel, chemicals, and electricity. Gerschenkron called it the \u201cadvantage of backwardness.\u201d Sometimes the fastest way to build the new thing is to have never built the old one too well.',
+        'The mechanism runs deeper than \u201cincumbents are slow.\u201d When you optimize infrastructure for paradigm A, you also end up with investments that are hard to change, workers whose skills only fit A, and habits and institutions shaped by A. Most importantly, many people who make their living from A will fight to keep it that way. Mancur Olson precisely captured this in his book The Rise and Decline of Nations. Successful economies eventually lose their flexibility. They fill up with interest groups that protect the old ways, making it hard to change. In the end, success turns into rigidity. The trap is what happens after you win.',
+        'Which brings me to AI, where this is about to get very expensive for somebody.',
+        '\u00a7 The competition moved down the stack',
+        'For about twenty years, the battlefield was digital. The U.S. built every incentive around it: venture capital that prices asset-light bets correctly, public markets that reward 80% margins, and an immigration system that funneled the world\u2019s best engineers into a few zip codes. It worked. American labs still build the best models.',
+        'But the bottleneck for AI is moving down the stack, from the digital layer into the physical layer. It\u2019s no longer a smarter architecture that decides who gets to scale. It is an electric current. Grid interconnection. High voltage transformers. Fabs. And the moment the constraint is physical, twenty years of U.S. software optimization stops being an advantage and becomes the cage.',
+        'Look at the numbers. Connecting a new data center to the U.S. grid takes four to ten years. Building the data center itself takes two to three. Roughly 2,300 gigawatts of generation and storage are stranded in interconnection queues, more than the country\u2019s entire installed capacity. And here\u2019s the tell that the trap is real: in a single year, the share of new data center capacity going off-grid instead of waiting for an interconnection jumped from near zero to around thirty percent.',
+        'None of those bottlenecks is technological. They are the same institutions that make America a wonderful place to start a software company: federalism, environmental review, distributed private utilities, property rights, and a rule of law that hands everyone a say. Every one of those is also a veto. The system is doing precisely what it was built to do: protect distributed private interests, deliberate slowly, and let people object. And that is the thing strangling the buildout. America didn\u2019t get worse at infrastructure by accident. It got so good at something else that it forgot how to pour concrete and string wire on a national scale.',
+        'China is the mirror image, and the EV story already told us why. The same muscle that lets it blanket the country with charging stations, a state-owned grid, no private incumbent to fight, and planning-to-operation measured in months, transfers straight onto AI\u2019s power problem. It\u2019s adding roughly six times the U.S.\u2019s generation capacity over the next five years, putting up 430 gigawatts of wind and solar in 2025 alone. It runs data-center electricity at under half American rates. When the binding constraint becomes \u201ccan you build enormous physical infrastructure fast, with no one able to stop you,\u201d China\u2019s entire system is the optimization, and America\u2019s entire system is the trap.',
+        '\u00a7 But the trap runs both ways',
+        'This is where the lazy version of the essay takes over: \u201cChina is winning the AI race.\u201d That\u2019s not what the law says. The law says each side is caged by its own optimization, which means China is caged too, sitting in the exact layer where the U.S. still holds the high ground.',
+        'Watch the chips. Export controls cut China off from Nvidia and CUDA, the most optimized hardware-software stack in computing, by the logic of lock-in that should have been a death sentence. Instead, it shoved China off the optimized path onto a worse one: Huawei\u2019s Ascend line, now scaling toward 1.6 million dies a year, with ByteDance alone committing $5.6 billion. Gerschenkron\u2019s advantage of backwardness again, except that it was manufactured by sanctions rather than history. Deprived of an optimized solution, you have no choice but to invent your own path that compounds itself independently.',
+        'But the cage is also real. China\u2019s cutting-edge manufacturing capabilities have stopped at 7nm, and it is relying on its foreign stocks of high-bandwidth memory chips. At the real cutting edge of transistors, China is the one looking up to the moat of an incumbent player, TSMC, ASML\u2019s lithography machines, and a legacy supply chain that cannot be circumvented in three years by any amount of government coordination.',
+        'The other cage is subtler, and it\u2019s where the advantage of backwardness closes its own loop. China won mobile through being backward. It did not have an established desktop web infrastructure to protect around 2010, and therefore leaped from the PC to super apps. Backwardness was the entire advantage. But this advantage had a second half that\u2019s never quoted: once you leap, you\u2019re the one who holds the installed base. China tuned its mobile internet infrastructure to be a closed ecosystem and consumer exploitation, and it is that muscle memory that it brings to AI. Closedness, exploitation, and immediate monetization are all traits that might be wrong for a domain in which the advantage accrues to the open, long-term player. China leveraged the logic upwards. And now it is trapped on the other side.',
+        'Be precise about where that bites, though, because it\u2019s easy to overclaim. It doesn\u2019t bite at the model layer. The walled-garden data moat turned out to be irrelevant to building frontier models, which is exactly why DeepSeek and Qwen came out as good as they are. It bites at the instinct for capturing the value. The cage is in the reflex, not the capability.',
+        'So the actual situation may not be a race with a clear leader. It\u2019s a stack, fought layer by layer, and each country is strongest exactly where the other is caged: frontier models and algorithms, the U.S. wins; leading-edge fabrication, the U.S. wins and this is China\u2019s cage; power and grid, China wins and this is the U.S.\u2019 cage; deployment instinct, still open, but China\u2019s natural extraction instinct is a self-imposed trap.',
+        'Everything comes down to one question: which layer is the binding constraint? Because that\u2019s the only layer whose trap actually matters. If the bottleneck is algorithmic cleverness, U.S. optimization pays off and keeps paying. If it\u2019s gigawatts, and a growing number of serious people think it is, then the most sophisticated model in the world simply doesn\u2019t run, and the country that can\u2019t build power loses to the country that can\u2019t build the perfect transistor.',
+        '\u00a7 What I\u2019d actually watch',
+        'First: Stop scoring the AI race on model benchmarks. That\u2019s the layer commoditizing fastest. Frontier labs leapfrog each other by fractions of a point every few months, and no model holds a clean lead across categories for long. The money is in the layer that binds, and for the next few years, that layer is power. The picks-and-shovels clich\u00e9 is right. It\u2019s just wrong about which shovels.',
+        'Second: The trap\u2019s not fate. It\u2019s a time tax that can be paid. Those U.S. data centers going off-grid? The market is going around its own institutional cage in real time. The variable I\u2019d actually look for with the U.S. is whether the country can pull veto points out of interconnection and permit before the constraint bites down. That\u2019s the dominating lever, not the only one. Still, it\u2019s a political-economy question, not a technology one, and Olson\u2019s whole point is that mature democracies are, by their nature, bad at exactly this, which is exactly why it is worth watching.',
+        'Every system that dominates an era spends its victory lap building its own cage for the next one. The U.S. won the software era so completely that it forgot how to quickly build things in the physical world. On the flip side, China got so good at manufacturing and infrastructure that it might never escape the closed, top-down control that made it successful. Neither trap is permanent, but you don\u2019t get to choose your own constraints. You inherit them from the very things you excel at.'
+      ] },
+      { slot:'w-3', title:'People always return to their original state.', desc:'On ego, ambition, and the self we drift back to once the noise quiets.', date:'2025', offset:'150px', cover:'linear-gradient(180deg,#4a5240,#8a8a72 55%,#cabf9c)', url:'https://carazhou.substack.com', body:[
+        'Philosophies across time such as Buddhism, Daoism, Stoicism, suggest that beneath layers of ego, ambition, and external influence, there\u2019s a more essential \u201cself\u201d or even emptiness that people inevitably return to.',
+        'At first, we chase money, titles, proximity to prestige. But time reveals otherwise. No matter how much we contort, we drift back to the gravity of our inner state.',
+        'Perhaps that is the real measure of a career, or of a life. Not how far it can pull us away from ourselves, but whether it leads us back to the person we have always been.',
+        'This is why some people, after climbing so high, step away to write, to garden, to raise children, or simply to breathe. From the outside it looks like regression. In truth it is a return. We do not really reinvent ourselves. We uncover what was waiting all along, once the noise quiets down.',
+        'In relationships, this truth feels even more visible. In the beginning, both partners soften their edges. They are more attentive, more patient, more adventurous than they would be alone. Love makes us pliable, as if we could keep reshaping ourselves for the other.',
+        'But with time we circle back. The small habits reappear. The hidden temperaments resurface. The rhythms we slip into when no one is watching return. You can only hold your breath for so long before you begin to breathe in your own way again.',
+        'The real question, whether in life, in work, or in love, is not whether we can change ourselves for a season. It is whether our original state is something we can live with, and whether those who walk beside us can live with it too.'
+      ] },
+      { slot:'w-5', title:'Coming soon', desc:'More essays in the works.', offset:'92px', cover:'linear-gradient(180deg,#1f2a22,#3c4a3a)' }
     ];
   }
   get deals(){
     return [
-      { n:'01', title:'Project Helios', desc:'Sell-side lead on a software carve-out \u2014 built the model, ran diligence, drafted the CIM.', value:'$4.0B', role:'Sell-side', year:'2023' },
-      { n:'02', title:'Project Atlas', desc:'Cross-border acquisition \u2014 owned synergy analysis and the board-deck narrative.', value:'$820M', role:'Buy-side', year:'2022' },
-      { n:'03', title:'Project Vega', desc:'Minority growth round \u2014 led QofE coordination and management prep.', value:'$140M', role:'Sell-side', year:'2022' },
-      { n:'04', title:'Margin Map', desc:'A unit-economics model a portfolio company still uses for board reporting.', value:'\u2014', role:'Operating', year:'2023' }
+      { n:'01', title:'Project Helios', desc:'Sell-side lead on a software carve-out \u2014 built the model, ran diligence, drafted the CIM.', value:'$4.0B', role:'Sell-side', year:'2023', bg:'#b4a25b', fg:'#22305e', sub:'rgba(34,48,94,.7)', edge:'#9c8b48' },
+      { n:'02', title:'Project Atlas', desc:'Cross-border acquisition \u2014 owned synergy analysis and the board-deck narrative.', value:'$820M', role:'Buy-side', year:'2022', bg:'#d9d1b6', fg:'#2c3a30', sub:'rgba(44,58,48,.68)', edge:'#c3ba9c' },
+      { n:'03', title:'Project Vega', desc:'Minority growth round \u2014 led QofE coordination and management prep.', value:'$140M', role:'Sell-side', year:'2022', bg:'#2b4257', fg:'#eef2f5', sub:'rgba(238,242,245,.72)', edge:'#1e2f3f' },
+      { n:'04', title:'Margin Map', desc:'A unit-economics model a portfolio company still uses for board reporting.', value:'\u2014', role:'Operating', year:'2023', bg:'#6f7278', fg:'#f3f1ea', sub:'rgba(243,241,234,.7)', edge:'#5a5d63' }
     ];
   }
   get ai(){
     return [
-      { n:'01', title:'Vibe CRM', desc:'A weekend-built relationship tracker for my own pipeline.', stack:'Next.js \u00b7 Claude', status:'Live \u00b7 ~40 users', year:'2024' },
-      { n:'02', title:'Inbox Zero', desc:'An AI triage agent that sorts and drafts replies.', stack:'Agent \u00b7 Gmail API', status:'Private beta \u00b7 60', year:'2025' },
-      { n:'03', title:'Standup Bot', desc:'Compiles async standups into a daily digest.', stack:'Slack \u00b7 cron', status:'Paying teams', year:'2025' },
-      { n:'04', title:'Runway', desc:'Scenario planning for early-stage finance \u2014 burn, forecast, hiring.', stack:'React \u00b7 DuckDB', status:'Prototype', year:'2025' }
+      { slot:'ai-1', label:'DEAL RESEARCH AGENT', labelColor:'#e0531d', cover:'linear-gradient(160deg,#1b2a4a,#3a5a82 55%,#c97a4a)', ph:'cover', soon:false, live:true, interactive:'deal-agent', title:'Deal Research Agent', date:'2026', desc:'IB-grade investment memos on any AI company. Enter a name. Get a structured memo in 30 seconds \u2014 business model, moat, valuation, China angle.', url:'https://github.com', linkLabel:'View on GitHub \u2197', body:[
+        'IB-grade investment memos on any AI company in 30 seconds. Built with the Claude API and Streamlit \u2014 the kind of tool I wanted at my own desk, so I built it.',
+        '\u00a7 What it does',
+        'Enter any company name and it returns a structured investment memo: business-model analysis, key metrics (ARR, valuation, growth), funding history and investors, a competitive-moat assessment, the key risks, an IB valuation view with revenue multiples and comps, a China angle on competitive threat and market opportunity, and a Strong / Moderate / Weak conviction verdict.',
+        '\u00a7 Why I built it',
+        'Writing a first-pass memo by hand takes an analyst the better part of a day. Most of that is gathering and structuring, not judgment. I wanted the structure handed to me instantly so the human part \u2014 the conviction call \u2014 is where the time goes.',
+        '\u00a7 Stack',
+        'Streamlit front end, Claude (Opus) via the Anthropic API, Python. Deployable to Streamlit Cloud for a public URL; bring your own API key in the sidebar.'
+      ] },
+      { slot:'ai-2', label:'BOTANIC GARDEN', labelColor:'#c0341d', cover:'linear-gradient(150deg,#e7ddc9,#dca0a0 52%,#c0341d)', ph:'cover', soon:false, live:true, interactive:'bloom', title:'Botanic Garden', date:'2026', desc:'A quiet, gallery-like WebGL flower bloom — Georgia O’Keeffe in code. Click to bloom; tune the palette and motion.' },
+      { slot:'ai-3', label:'CHARTFORGE', labelColor:'#fff', cover:'linear-gradient(150deg,#e0531d,#1b1714)', ph:'cover', soon:false, live:true, interactive:'chartforge', title:'ChartForge', date:'2026', desc:'PDF charts to editable Excel. Upload a PDF, pick the chart pages, and download an .xlsx with native, editable Excel charts — all in the browser, no server.' }
     ];
   }
   get social(){
@@ -329,6 +593,77 @@ class Component extends DCLogic {
 
   get refs2(){ return { about:this.aboutRef, writing:this.writingRef, deals:this.dealsRef, ai:this.aiRef, reading:this.readingRef, objects:this.objectsRef }; }
 
+  setupDealShelf(){
+    var vp = this.dealVpRef.current, track = this.dealTrackRef.current;
+    if(!vp || !track || !track.children.length){ this._dsRaf = requestAnimationFrame(()=>this.setupDealShelf()); return; }
+    var cs = getComputedStyle(track);
+    var PAD = parseFloat(cs.paddingLeft) || 76;
+    var GAP = parseFloat(cs.columnGap || cs.gap) || 14;
+    var COL = 96, OPEN = 520;
+    var N = track.children.length, BASE = N/3;   // 12
+    for(var i=0;i<N;i++){ track.children[i].style.transition = 'none'; track.children[i].style.flex = 'none'; }
+    this._P = BASE + 0.001;
+    this._focusIdx = -1;
+    this._dsAudio = false;
+    var onEnter = ()=>{ this._dsAudio = true; };
+    var onLeave = ()=>{ this._dsAudio = false; };
+    vp.addEventListener('pointerenter', onEnter);
+    vp.addEventListener('pointerleave', onLeave);
+    this._dsTeardown = ()=>{ vp.removeEventListener('pointerenter', onEnter); vp.removeEventListener('pointerleave', onLeave); };
+    var wrapDist = (i,P)=>{ var d=i-P; while(d>N/2) d-=N; while(d<-N/2) d+=N; return d; };
+    var tick = ()=>{
+      var track = this.dealTrackRef.current, vp = this.dealVpRef.current;
+      if(track && vp){
+        this._P += 0.011;
+        if(this._P >= 2*BASE) this._P -= BASE;
+        var P = this._P, sp = track.children, n = sp.length, widths = [];
+        for(var i=0;i<n;i++){
+          var d = Math.abs(wrapDist(i,P));
+          var t = Math.min(1, Math.max(0, (d - 0.42)/0.6));
+          var f = 1 - t*t*(3-2*t);
+          var w = COL + (OPEN-COL)*f;
+          widths[i] = w;
+          sp[i].style.width = w + 'px';
+          sp[i].style.zIndex = String(10 + Math.round(f*100));
+          var closed = sp[i].firstElementChild, open = sp[i].lastElementChild;
+          if(closed) closed.style.opacity = String(Math.max(0, 1 - f*1.8));
+          if(open) open.style.opacity = String(f);
+        }
+        var fl = Math.floor(P) % n, frac = P - Math.floor(P);
+        var cum = 0; for(var k=0;k<fl;k++) cum += widths[k] + GAP;
+        var cFl = cum + widths[fl]/2;
+        var cNext = cum + widths[fl] + GAP + widths[(fl+1)%n]/2;
+        var centerX = cFl + (cNext-cFl)*frac;
+        track.style.transform = 'translateX(' + (vp.clientWidth/2 - PAD - centerX) + 'px)';
+        var fi = Math.round(P) % n;
+        if(fi !== this._focusIdx){ this._focusIdx = fi; if(this._dsAudio) this.spineSound(); }
+      }
+      this._dsRaf = requestAnimationFrame(tick);
+    };
+    this._dsRaf = requestAnimationFrame(tick);
+  }
+
+  spineSound(){
+    try{
+      if(this._lastSlide && (performance.now()-this._lastSlide)<55) return;
+      this._lastSlide = performance.now();
+      var Ctx = window.AudioContext || window.webkitAudioContext; if(!Ctx) return;
+      if(!this._actx) this._actx = new Ctx();
+      var ctx = this._actx; if(ctx.state==='suspended') ctx.resume();
+      var now = ctx.currentTime, dur = 0.16;
+      var buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate*dur), ctx.sampleRate);
+      var d = buf.getChannelData(0);
+      for(var i=0;i<d.length;i++){ var t=i/d.length; d[i]=(Math.random()*2-1)*(1-t)*(1-t); }
+      var src = ctx.createBufferSource(); src.buffer = buf;
+      var bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=0.8;
+      bp.frequency.setValueAtTime(1700, now); bp.frequency.exponentialRampToValueAtTime(520, now+dur);
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.16, now+0.018); g.gain.exponentialRampToValueAtTime(0.0001, now+dur);
+      src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+      src.start(now); src.stop(now+dur);
+    }catch(e){}
+  }
+
   componentDidMount(){
     const els = this._order.map(id=>this.refs2[id].current).filter(Boolean);
     this._io = new IntersectionObserver((entries)=>{
@@ -353,7 +688,7 @@ class Component extends DCLogic {
     const root = this.scrollRef.current; if(!root) return;
     root.querySelectorAll('.sec-tag').forEach(el=>{ el.style.color = a; });
   }
-  componentWillUnmount(){ if(this._io) this._io.disconnect(); if(this._rio) this._rio.disconnect(); }
+  componentWillUnmount(){ if(this._io) this._io.disconnect(); if(this._rio) this._rio.disconnect(); if(this._dsRaf) cancelAnimationFrame(this._dsRaf); if(this._dsTeardown) this._dsTeardown(); }
 
   getScroller(forObserver){
     const cands = [];
@@ -387,6 +722,69 @@ class Component extends DCLogic {
   toggleSurf(){ this.setState(s=>({ surfOpen:!s.surfOpen })); }
   toggleSnow(){ this.setState(s=>({ snowOpen:!s.snowOpen })); }
   toggleTennis(){ this.setState(s=>({ tennisOpen:!s.tennisOpen })); }
+  openRead(i){ if(this.writing[i] && this.writing[i].body){ this.setState({ reader:this.writing[i] }); } }
+  openProject(obj){ if(obj && (obj.body || obj.interactive)){ this.setState({ reader:obj }); } }
+
+  zoomOpen(e, obj){
+    if(!(obj && (obj.body || obj.interactive))) return;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var card = (e.currentTarget && e.currentTarget.closest) ? e.currentTarget.closest('.led-row') : null;
+    if(reduce || !card){ this.openProject(obj); return; }
+    var r = card.getBoundingClientRect();
+    var fly = document.createElement('div');
+    var ease = 'cubic-bezier(.66,0,.2,1)';
+    fly.style.cssText = 'position:fixed;z-index:120;border-radius:6px;overflow:hidden;pointer-events:none;'
+      + 'left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;height:'+r.height+'px;'
+      + 'background:'+(obj.cover||'#1b1714')+';box-shadow:0 10px 30px rgba(0,0,0,.18);'
+      + 'transition:left .6s '+ease+',top .6s '+ease+',width .6s '+ease+',height .6s '+ease+',border-radius .6s ease;';
+    // carry the card label so the whole card appears to fly out
+    var lab = card.querySelector('span');
+    if(lab){
+      var l = document.createElement('div');
+      l.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.0;transition:opacity .4s ease;font-family:"IBM Plex Mono",monospace;font-size:18px;letter-spacing:.08em;color:'+(obj.labelColor||'#fff')+';text-shadow:0 1px 12px rgba(0,0,0,.3)';
+      l.textContent = lab.textContent;
+      fly.appendChild(l);
+    }
+    document.body.appendChild(fly);
+    fly.getBoundingClientRect(); // force reflow
+    requestAnimationFrame(()=>{
+      fly.style.left='0px'; fly.style.top='0px';
+      fly.style.width='100vw'; fly.style.height='100vh'; fly.style.borderRadius='0px';
+      if(fly.firstChild) fly.firstChild.style.opacity='1';
+    });
+    window.setTimeout(()=>{
+      this.setState({ reader:obj });
+      requestAnimationFrame(()=>{
+        fly.style.transition='opacity .45s ease';
+        fly.style.opacity='0';
+        window.setTimeout(()=>{ if(fly.parentNode) fly.parentNode.removeChild(fly); }, 480);
+      });
+    }, 620);
+  }
+
+  async runDeal(){
+    const el = this.dealRef.current;
+    const q = el ? (el.value||'').trim() : '';
+    if(!q || this.state.dealLoading) return;
+    this.setState({ dealLoading:true, dealError:'', dealMemo:null });
+    const prompt = 'You are a senior IB analyst at a top bulge-bracket bank covering AI/tech companies. Produce a concise, analytical investment memo for the company below using the IB framework.\n\n'
+      + 'Respond ONLY with valid minified JSON, no markdown or preamble. Keep every string tight (1\u20132 sentences max). Schema:\n'
+      + '{"company":"","tagline":"","stage":"","sector":"","founded":"","hq":"","business_model":"","key_metrics":[{"label":"","value":""}],"funding_history":"","moat":"","risks":"","competitors":[""],"ib_valuation_view":"","china_angle":"","verdict":"strong|moderate|weak","verdict_reason":""}\n'
+      + 'key_metrics: exactly 4 (e.g. ARR/Revenue, Valuation, YoY Growth, Employees). Use reasonable estimates if exact figures are unknown. competitors: 3. china_angle: a Chinese competitive-threat or market-opportunity note, or "" if none.\n\n'
+      + 'Company: ' + q;
+    try{
+      const text = await window.claude.complete({ messages:[{ role:'user', content: prompt }] });
+      let clean = String(text).replace(/```json|```/g,'').trim();
+      const a = clean.indexOf('{'), b = clean.lastIndexOf('}');
+      if(a>=0 && b>a) clean = clean.slice(a, b+1);
+      const memo = JSON.parse(clean);
+      this.setState({ dealMemo:memo, dealLoading:false });
+    }catch(err){
+      this.setState({ dealError:'Could not generate a memo \u2014 try again, or try a more well-known company.', dealLoading:false });
+    }
+  }
+  dealKey(e){ if(e.key==='Enter'){ e.preventDefault(); this.runDeal(); } }
+  closeReader(){ this.setState({ reader:null, dealMemo:null, dealError:'', dealLoading:false }); }
   onRowEnter(i){ this.setState(s=>({ pv:{ ...s.pv, visible:true, i } })); }
   onListLeave(){ this.setState(s=>({ pv:{ ...s.pv, visible:false } })); }
   onListMove(e){
@@ -420,6 +818,8 @@ class Component extends DCLogic {
     const objects = this.data;
     const indexItems = objects.map((o,i)=>({ ...o, onEnter:()=>this.onRowEnter(i) }));
 
+    const rd = this.state.reader || null;
+    const dm = this.state.dealMemo;
     const pv = this.state.pv;
     const cur = objects[pv.i] || objects[0];
     const pvStyle = {
@@ -446,8 +846,47 @@ class Component extends DCLogic {
       snowOpen: this.state.snowOpen,
       toggleTennis:()=>this.toggleTennis(),
       tennisOpen: this.state.tennisOpen,
-      writing:this.writing, deals:this.deals, ai:this.ai, social:this.social,
+      writing:this.writing.map((w,i)=>({ ...w, cursor: w.body?'pointer':'default', hover: w.body?'transform:translateY(-8px)':'', onClick: w.body?(()=>this.openRead(i)):(()=>{}) })),
+      deals:this.deals, spineSound:()=>this.spineSound(),
+      dealSpines:(function(base){
+        var ph=[
+          {n:'05',title:'Project Meridian',value:'$1.2B',role:'Sell-side',year:'2021',desc:'Placeholder — deal summary goes here. Swap in the real story when ready.'},
+          {n:'06',title:'Project Cobalt',value:'$340M',role:'Buy-side',year:'2021',desc:'Placeholder — deal summary goes here. Swap in the real story when ready.'},
+          {n:'07',title:'Project Ember',value:'$95M',role:'Advisory',year:'2020',desc:'Placeholder — deal summary goes here. Swap in the real story when ready.'},
+          {n:'08',title:'In Confidence',value:'$——',role:'Advisory',year:'—',desc:'Details available on request.'}
+        ];
+        var all=base.concat(ph), out=[];
+        for(var r=0;r<3;r++){ for(var i=0;i<all.length;i++){ out.push(Object.assign({}, all[i], { tilt:(i%5===2)?'7deg':'0deg' })); } }
+        return out;
+      })(this.deals),
+      ai:this.ai.map((p)=>Object.assign({}, p, { cursor: p.live?'pointer':'default', hover: p.live?'transform:translateY(-10px)':'', onClick: (p.live&&(p.body||p.interactive))?((e)=>this.zoomOpen(e,p)):(()=>{}) })), social:this.social,
       standup:this.standup, misc:this.misc,
+      readerOpen: this.state.reader!=null,
+      closeReader:()=>this.closeReader(),
+      stopProp:(e)=>{ e.stopPropagation(); },
+      rTitle: rd?rd.title:'', rDesc: rd?rd.desc:'', rDate: rd?rd.date:'', rUrl: rd?(rd.url||'#'):'#', rLinkLabel: rd?(rd.linkLabel||'Read on Substack \u2197'):'', rBody: rd?this.formatBody(rd.body):[], rHeroSlot: rd?(rd.slot+'-hero'):'r-hero',
+      rDealAgent: !!(rd && rd.interactive==='deal-agent'),
+      rBloom: !!(rd && rd.interactive==='bloom'),
+      rChartforge: !!(rd && rd.interactive==='chartforge'),
+      rEssay: !!(rd && !rd.interactive),
+      dealRef: this.dealRef,
+      keyRef: this.keyRef,
+      saveKey: ()=>{ try{ var v=this.keyRef.current?this.keyRef.current.value:''; if(v) localStorage.setItem('cara_anthropic_key', v); }catch(e){} },
+      runDeal: ()=>this.runDeal(),
+      dealKey: (e)=>this.dealKey(e),
+      dealLoading: this.state.dealLoading,
+      dealError: this.state.dealError,
+      hasMemo: !!dm,
+      dmCompany: dm?dm.company:'', dmTagline: dm?dm.tagline:'',
+      dmBadges: dm? [dm.stage, dm.sector, dm.founded, dm.hq].filter(Boolean) : [],
+      dmMetrics: (dm&&dm.key_metrics)?dm.key_metrics:[],
+      dmSections: dm? [{label:'Business model',body:dm.business_model},{label:'Funding history',body:dm.funding_history},{label:'Competitive moat',body:dm.moat},{label:'Key risks',body:dm.risks}].filter(s=>s.body) : [],
+      dmCompetitors: (dm&&dm.competitors)?dm.competitors:[],
+      dmValuation: dm?dm.ib_valuation_view:'',
+      dmChina: dm?(dm.china_angle||''):'', dmHasChina: !!(dm&&dm.china_angle),
+      dmVerdictLabel: dm? ((dm.verdict||'moderate').charAt(0).toUpperCase()+(dm.verdict||'moderate').slice(1)+' conviction') : '',
+      dmVerdictReason: dm?dm.verdict_reason:'',
+      dmVerdictColor: dm? (dm.verdict==='strong'?'#1f8a4c':(dm.verdict==='weak'?'#c0392b':'#c97a1e')) : '#c97a1e',
       indexItems,
       onListMove:(e)=>this.onListMove(e), onListLeave:()=>this.onListLeave(),
       pvStyle, pvTitle:cur.title, pvDim:cur.dim, pvYear:cur.year, pvMat:cur.mat
