@@ -1,350 +1,655 @@
-// <chartforge-app> — client-side PDF → editable-Excel chart extraction tool.
-// Loads pdfjs-dist + jszip from CDN. No server, no build step.
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.379";
-import JSZip from "https://esm.sh/jszip@3.10.1";
+// @ds-adherence-ignore -- omelette starter scaffold (raw elements/hex/px by design)
+/* BEGIN USAGE */
+/**
+ * <image-slot> — user-fillable image placeholder.
+ *
+ * Drop this into a deck, mockup, or page wherever you want the user to
+ * supply an image. You control the slot's shape and size; the user fills it
+ * by dragging an image file onto it (or clicking to browse). The dropped
+ * image persists across reloads via a .image-slots.state.json sidecar —
+ * same read-via-fetch / write-via-window.omelette pattern as
+ * design_canvas.jsx, so the filled slot shows on share links, downloaded
+ * zips, and PPTX export. Outside the omelette runtime the slot is read-only.
+ *
+ * The host bridge only allows sidecar writes at the project root, so the
+ * HTML that uses this component is assumed to live at the project root too
+ * (same constraint as design_canvas.jsx).
+ *
+ * Attributes:
+ *   id           Persistence key. REQUIRED for the drop to survive reload —
+ *                every slot on the page needs a distinct id.
+ *   shape        'rect' | 'rounded' | 'circle' | 'pill'   (default 'rounded')
+ *                'circle' applies 50% border-radius; on a non-square slot
+ *                that's an ellipse — set equal width and height for a true
+ *                circle.
+ *   radius       Corner radius in px for 'rounded'.       (default 12)
+ *   mask         Any CSS clip-path value. Overrides `shape` — use this for
+ *                hexagons, blobs, arbitrary polygons.
+ *   fit          object-fit: cover | contain | fill.       (default 'cover')
+ *                With cover (the default) double-clicking the filled slot
+ *                enters a reframe mode: the whole image spills past the mask
+ *                (translucent outside, opaque inside), drag to reposition,
+ *                corner-drag to scale. The crop persists alongside the image
+ *                in the sidecar. contain/fill stay static.
+ *   position     object-position for fit=contain|fill.     (default '50% 50%')
+ *   placeholder  Empty-state caption.                      (default 'Drop an image')
+ *   src          Optional initial/fallback image URL. A user drop overrides
+ *                it; clearing the drop reveals src again.
+ *
+ * Size and layout come from ordinary CSS on the element — width/height
+ * inline or from a parent grid — so it composes with any layout.
+ *
+ * Usage:
+ *   <image-slot id="hero"   style="width:800px;height:450px" shape="rounded" radius="20"
+ *               placeholder="Drop a hero image"></image-slot>
+ *   <image-slot id="avatar" style="width:120px;height:120px" shape="circle"></image-slot>
+ *   <image-slot id="kite"   style="width:300px;height:300px"
+ *               mask="polygon(50% 0, 100% 50%, 50% 100%, 0 50%)"></image-slot>
+ */
+/* END USAGE */
 
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://esm.sh/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs";
+(() => {
+  const STATE_FILE = '.image-slots.state.json';
+  // 2× a ~600px slot in a 1920-wide deck — retina-sharp without making the
+  // sidecar enormous. A 1200px WebP at q=0.85 is ~150-300KB.
+  const MAX_DIM = 1200;
+  // Raster formats only. SVG is excluded (can carry script; createImageBitmap
+  // on SVG blobs is inconsistent). GIF is excluded because the canvas
+  // re-encode keeps only the first frame, so an animated GIF would silently
+  // go still — better to reject than surprise.
+  const ACCEPT = ['image/png', 'image/jpeg', 'image/webp', 'image/avif'];
 
-const CSS = `
-.chartforge{position:absolute;inset:0;display:flex;background:#f4efe2;color:#1b1714;font-family:'Newsreader',Georgia,serif;overflow:hidden}
-.chartforge *{box-sizing:border-box}
-.cf-left{flex:0 0 37%;max-width:37%;background:#f4efe2;border-right:1px solid #1b1714;display:flex;flex-direction:column;padding:30px 32px}
-.cf-brand-h{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:600;font-size:26px;letter-spacing:-.01em;margin:0}
-.cf-brand-p{font-size:15px;color:#5a5246;margin:4px 0 0}
-.cf-left-mid{flex:1;display:flex;align-items:center;justify-content:center}
-.cf-choose{font-family:'IBM Plex Mono','Courier New',monospace;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#d4500f;background:#fff;border:1px solid #d4500f;padding:16px 34px;cursor:pointer;transition:background .15s,color .15s}
-.cf-choose:hover{background:#d4500f;color:#fff}
-.cf-choose:disabled{opacity:.5;cursor:default}
-.cf-fname{font-family:'IBM Plex Mono','Courier New',monospace;font-size:11px;letter-spacing:.04em;color:#7a7060;margin-top:16px;text-align:center;max-width:240px;word-break:break-all}
-.cf-right{flex:1;background:#e0531d;color:#1b1714;display:flex;flex-direction:column;min-width:0}
-.cf-rhead{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:26px 30px 16px;border-bottom:1px solid #1b1714}
-.cf-rtitle{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:600;font-size:30px;letter-spacing:-.01em;margin:0;color:#1b1714}
-.cf-count{font-family:'IBM Plex Mono','Courier New',monospace;font-size:12px;letter-spacing:.1em;color:#3a1f12;margin-left:12px}
-.cf-dl{display:inline-flex;align-items:center;gap:9px;font-family:'IBM Plex Mono','Courier New',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#e0531d;background:#1b1714;border:none;padding:13px 20px;cursor:pointer}
-.cf-dl:hover{background:#000}
-.cf-dl:disabled{opacity:.4;cursor:default}
-.cf-status{font-family:'IBM Plex Mono','Courier New',monospace;font-size:11px;letter-spacing:.06em;color:#3a1f12;padding:12px 30px;border-bottom:1px solid rgba(27,23,20,.35);min-height:40px;display:flex;align-items:center}
-.cf-list{flex:1;overflow-y:auto;padding:20px 30px 40px;display:flex;flex-direction:column;gap:14px}
-.cf-card{display:flex;gap:18px;align-items:center;background:#f4efe2;border:1px solid #1b1714;padding:14px;cursor:pointer;transition:box-shadow .12s}
-.cf-card.sel{box-shadow:0 0 0 2px #1b1714;border-color:#1b1714}
-.cf-card:not(.sel){opacity:.62}
-.cf-thumb{flex:none;width:96px;height:124px;background:#fff;border:1px solid rgba(27,23,20,.4);object-fit:contain}
-.cf-meta{flex:1;min-width:0}
-.cf-page{font-family:'IBM Plex Mono','Courier New',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#7a3a22}
-.cf-ctitle{font-size:21px;line-height:1.15;margin:5px 0 8px;color:#1b1714;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cf-tags{display:flex;gap:8px;flex-wrap:wrap;font-family:'IBM Plex Mono','Courier New',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#3a1f12}
-.cf-tag{border:1px solid rgba(27,23,20,.45);padding:3px 9px}
-.cf-kinds{display:inline-flex;margin-right:8px;border:1px solid rgba(27,23,20,.45)}
-.cf-kind{font-family:'IBM Plex Mono','Courier New',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#3a1f12;background:transparent;border:none;border-right:1px solid rgba(27,23,20,.28);padding:3px 9px;cursor:pointer}
-.cf-kind:last-child{border-right:none}
-.cf-kind.on{background:#1b1714;color:#f4efe2}
-.cf-dot{flex:none;width:24px;height:24px;border-radius:50%;border:1.5px solid #1b1714;display:flex;align-items:center;justify-content:center;color:#1b1714}
-.cf-empty{font-family:'Newsreader',Georgia,serif;font-style:italic;font-size:18px;color:#3a1f12;padding:30px;text-align:center}
-.cf-err{color:#5a0d00;background:#fff3ee;border:1px solid #c0392b}
-@media (max-width:760px){
-  .chartforge{flex-direction:column;position:relative;min-height:100vh}
-  .cf-left{flex:none;max-width:100%;border-right:none;border-bottom:1px solid #1b1714;min-height:46vh}
-  .cf-right{min-height:54vh}
-}`;
+  // ── Shared sidecar store ────────────────────────────────────────────────
+  // One fetch + immediate write-on-change for every <image-slot> on the
+  // page. Reads via fetch() so viewing works anywhere the HTML and sidecar
+  // are served together; writes go through window.omelette.writeFile, which
+  // the host allowlists to *.state.json basenames only.
+  const subs = new Set();
+  let slots = {};
+  // ids explicitly cleared before the sidecar fetch resolved — otherwise
+  // the merge below can't tell "never set" from "just deleted" and would
+  // resurrect the sidecar's stale value.
+  const tombstones = new Set();
+  let loaded = false;
+  let loadP = null;
 
-const ICON_DL = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
-const ICON_CHECK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-
-const CHART_WORDS = ["chart","graph","figure","fig.","axis","trend","quarterly","revenue","growth","percent","%","total","share","distribution","forecast","margin","ratio","index","yoy","cagr","ebitda"];
-const PIE_WORDS = ["pie","share","distribution","split","mix","composition","breakdown","allocation"];
-const LINE_WORDS = ["trend","over time","timeline","growth","forecast","trajectory","series","monthly","quarterly","yearly"];
-
-function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-
-class ChartForge extends HTMLElement {
-  connectedCallback(){
-    if(this._init) return; this._init = true;
-    this.classList.add("chartforge");
-    if(!document.getElementById("chartforge-css")){
-      const st=document.createElement("style"); st.id="chartforge-css"; st.textContent=CSS; document.head.appendChild(st);
-    }
-    this.candidates = [];
-    this.innerHTML =
-      '<div class="cf-left">'+
-        '<div><h1 class="cf-brand-h">ChartForge</h1><p class="cf-brand-p">PDF charts to editable Excel.</p></div>'+
-        '<div class="cf-left-mid"><div style="display:flex;flex-direction:column;align-items:center">'+
-          '<button class="cf-choose" type="button" aria-label="Choose a PDF file to analyze">Choose PDF</button>'+
-          '<div class="cf-fname" aria-live="polite"></div>'+
-        '</div></div>'+
-        '<input type="file" accept="application/pdf,.pdf" class="cf-file" hidden />'+
-      '</div>'+
-      '<div class="cf-right">'+
-        '<div class="cf-rhead">'+
-          '<div style="display:flex;align-items:baseline"><h2 class="cf-rtitle">Candidates</h2><span class="cf-count"></span></div>'+
-          '<button class="cf-dl" type="button" aria-label="Download Excel workbook" disabled>'+ICON_DL+'<span>Download</span></button>'+
-        '</div>'+
-        '<div class="cf-status" aria-live="polite">Upload a PDF to detect chart pages.</div>'+
-        '<div class="cf-list"><div class="cf-empty">No candidates yet.</div></div>'+
-      '</div>';
-
-    this.$choose = this.querySelector(".cf-choose");
-    this.$file = this.querySelector(".cf-file");
-    this.$fname = this.querySelector(".cf-fname");
-    this.$count = this.querySelector(".cf-count");
-    this.$dl = this.querySelector(".cf-dl");
-    this.$status = this.querySelector(".cf-status");
-    this.$list = this.querySelector(".cf-list");
-
-    const stop = (e)=>e.stopPropagation();
-    [this.$choose,this.$dl,this.$list].forEach(el=>el.addEventListener("click",stop));
-    this.$choose.addEventListener("click",()=>{ if(!this._busy) this.$file.click(); });
-    this.$file.addEventListener("change",(e)=>{ const f=e.target.files&&e.target.files[0]; if(f) this.analyze(f); });
-    this.$dl.addEventListener("click",()=>this.exportXlsx());
-  }
-
-  setStatus(t,err){ this.$status.textContent=t; this.$status.classList.toggle("cf-err",!!err); }
-
-  async analyze(file){
-    this._busy=true; this.$choose.disabled=true; this.$dl.disabled=true;
-    this.$fname.textContent=file.name;
-    this.candidates=[]; this.renderList();
-    this.setStatus("Reading PDF…",false);
-    try{
-      const buf=await file.arrayBuffer();
-      const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-      const OPS=pdfjsLib.OPS;
-      const out=[];
-      for(let p=1;p<=pdf.numPages;p++){
-        this.setStatus("Analyzing page "+p+" of "+pdf.numPages+"…",false);
-        const page=await pdf.getPage(p);
-        const tc=await page.getTextContent();
-        const items=tc.items.filter(i=>i.str&&i.str.trim());
-        const texts=items.map(i=>i.str.trim());
-        const joined=texts.join(" ");
-        const low=joined.toLowerCase();
-        // numeric tokens
-        const nums=(joined.match(/-?\$?\d[\d,]*\.?\d*%?/g)||[]);
-        const numCount=nums.length;
-        // chart words
-        let wordHits=0; CHART_WORDS.forEach(w=>{ if(low.indexOf(w)>=0) wordHits++; });
-        // operators
-        let vec=0,img=0;
-        try{
-          const ol=await page.getOperatorList();
-          for(const fn of ol.fnArray){
-            if(fn===OPS.constructPath||fn===OPS.fill||fn===OPS.stroke||fn===OPS.eoFill||fn===OPS.fillStroke) vec++;
-            else if(fn===OPS.paintImageXObject||fn===OPS.paintInlineImageXObject||fn===OPS.paintJpegXObject) img++;
+  function load() {
+    if (loadP) return loadP;
+    loadP = fetch(STATE_FILE)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        // Merge: sidecar loses to any in-memory change that raced ahead of
+        // the fetch (drop or clear) so neither is clobbered by hydration.
+        if (j && typeof j === 'object') {
+          const merged = Object.assign({}, j, slots);
+          // A framing-only write that raced ahead of hydration must not
+          // drop a user image that's only on disk — inherit u from the
+          // sidecar for any in-memory entry that lacks one.
+          for (const k in slots) {
+            if (merged[k] && !merged[k].u && j[k]) {
+              merged[k].u = typeof j[k] === 'string' ? j[k] : j[k].u;
+            }
           }
-        }catch(_){}
-        const score = numCount*1.0 + wordHits*4 + Math.min(vec,400)*0.05 + Math.min(img,10)*3;
-        if(score<14 || numCount<3) { page.cleanup&&page.cleanup(); continue; }
-        // thumbnail
-        const vp=page.getViewport({scale:1});
-        const scale=Math.min(0.9, 360/vp.width);
-        const tvp=page.getViewport({scale});
-        const cv=document.createElement("canvas"); cv.width=Math.ceil(tvp.width); cv.height=Math.ceil(tvp.height);
-        await page.render({canvasContext:cv.getContext("2d"),viewport:tvp}).promise;
-        const thumb=cv.toDataURL("image/png");
-        // title: prominent non-numeric line
-        const title=this.inferTitle(items)|| ("Chart on page "+p);
-        const kind=this.inferKind(low);
-        const rows=this.extractRows(texts)||this.fallbackRows(kind);
-        const conf=Math.max(0.4,Math.min(0.98, score/60));
-        out.push({ page:p, title, kind, confidence:conf, thumb, rows, selected:true });
-        page.cleanup&&page.cleanup();
-      }
-      this.candidates=out;
-      this.renderList();
-      if(out.length) this.setStatus(out.length+" chart "+(out.length===1?"candidate":"candidates")+" found · all selected",false);
-      else this.setStatus("No chart-like pages detected in this PDF.",false);
-    }catch(err){
-      console.error(err);
-      this.setStatus("Could not analyze this PDF — it may be encrypted or image-only.",true);
-    }finally{
-      this._busy=false; this.$choose.disabled=false;
+          for (const id of tombstones) delete merged[id];
+          slots = merged;
+        }
+        tombstones.clear();
+      })
+      .catch(() => {})
+      .then(() => { loaded = true; subs.forEach((fn) => fn()); });
+    return loadP;
+  }
+
+  // Serialize writes so two near-simultaneous drops on different slots
+  // can't reorder at the backend and leave the sidecar with only the
+  // first. A save requested mid-flight just marks dirty and re-fires on
+  // completion with the then-current slots.
+  let saving = false;
+  let saveDirty = false;
+  function save() {
+    if (saving) { saveDirty = true; return; }
+    const w = window.omelette && window.omelette.writeFile;
+    if (!w) return;
+    saving = true;
+    Promise.resolve(w(STATE_FILE, JSON.stringify(slots)))
+      .catch(() => {})
+      .then(() => { saving = false; if (saveDirty) { saveDirty = false; save(); } });
+  }
+
+  const S_MAX = 5;
+  const clampS = (s) => Math.max(1, Math.min(S_MAX, s));
+
+  // Normalize a stored slot value. Pre-reframe sidecars stored a bare
+  // data-URL string; newer ones store {u, s, x, y}. Either shape is valid.
+  function getSlot(id) {
+    const v = slots[id];
+    if (!v) return null;
+    return typeof v === 'string' ? { u: v, s: 1, x: 0, y: 0 } : v;
+  }
+
+  function setSlot(id, val) {
+    if (!id) return;
+    if (val) { slots[id] = val; tombstones.delete(id); }
+    else { delete slots[id]; if (!loaded) tombstones.add(id); }
+    subs.forEach((fn) => fn());
+    // A drop is rare + high-value — write immediately so nav-away can't lose
+    // it. Gate on the initial read so we don't overwrite a sidecar we haven't
+    // merged yet; the merge in load() keeps this change once the read lands.
+    if (loaded) save(); else load().then(save);
+  }
+
+  // ── Image downscale ─────────────────────────────────────────────────────
+  // Encode through a canvas so the sidecar carries resized bytes, not the
+  // raw upload. Longest side is capped at 2× the slot's rendered width
+  // (retina) and at MAX_DIM. WebP keeps alpha and is ~10× smaller than PNG
+  // for photos, so there's no need for per-image format picking.
+  async function toDataUrl(file, targetW) {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const cap = Math.min(MAX_DIM, Math.max(1, Math.round(targetW * 2)) || MAX_DIM);
+      const scale = Math.min(1, cap / Math.max(bitmap.width, bitmap.height));
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+      return canvas.toDataURL('image/webp', 0.85);
+    } finally {
+      bitmap.close && bitmap.close();
     }
   }
 
-  inferTitle(items){
-    // pick a longer, mostly-alphabetic item in the upper portion, largest font
-    let best=null,bestScore=-1;
-    const maxH=Math.max.apply(null,items.map(i=>Math.abs((i.transform&&i.transform[3])||0)).concat([1]));
-    items.forEach(i=>{
-      const s=i.str.trim(); if(s.length<4||s.length>70) return;
-      const alpha=(s.match(/[a-zA-Z]/g)||[]).length;
-      if(alpha < s.length*0.55) return;
-      const h=Math.abs((i.transform&&i.transform[3])||0);
-      const y=(i.transform&&i.transform[5])||0;
-      const sc=h/maxH*2 + y*0.0002 + Math.min(s.length,40)*0.01;
-      if(sc>bestScore){ bestScore=sc; best=s; }
-    });
-    return best;
-  }
-  inferKind(low){
-    for(const w of PIE_WORDS) if(low.indexOf(w)>=0) return "pie";
-    for(const w of LINE_WORDS) if(low.indexOf(w)>=0) return "line";
-    return "bar";
-  }
-  extractRows(texts){
-    // pair a text label immediately followed by a numeric token
-    const rows=[]; const numRe=/^-?\$?\d[\d,]*\.?\d*%?$/;
-    for(let i=0;i<texts.length-1;i++){
-      const a=texts[i], b=texts[i+1];
-      const aNum=numRe.test(a), bNum=numRe.test(b);
-      if(!aNum && bNum){
-        const v=parseFloat(b.replace(/[^0-9.\-]/g,""));
-        if(isFinite(v) && a.length>=2 && a.length<=28 && /[a-zA-Z]/.test(a)) rows.push({label:a.slice(0,28),value:v});
-      }
-      if(rows.length>=12) break;
-    }
-    return rows.length>=3 ? rows : null;
-  }
-  fallbackRows(kind){
-    if(kind==="pie") return [{label:"Segment A",value:42},{label:"Segment B",value:31},{label:"Segment C",value:18},{label:"Segment D",value:9}];
-    if(kind==="line") return [{label:"Q1",value:120},{label:"Q2",value:148},{label:"Q3",value:139},{label:"Q4",value:171}];
-    return [{label:"Category 1",value:64},{label:"Category 2",value:88},{label:"Category 3",value:52},{label:"Category 4",value:97}];
-  }
+  // ── Custom element ──────────────────────────────────────────────────────
+  const stylesheet =
+    ':host{display:inline-block;position:relative;vertical-align:top;' +
+    '  font:13px/1.3 system-ui,-apple-system,sans-serif;color:rgba(0,0,0,.55);width:240px;height:160px}' +
+    '.frame{position:absolute;inset:0;overflow:hidden;background:rgba(0,0,0,.04)}' +
+    // .frame img (clipped) and .spill (unclipped ghost + handles) share the
+    // same left/top/width/height in frame-%, computed by _applyView(), so the
+    // inside-mask crop and the outside-mask spill stay pixel-aligned.
+    '.frame img{position:absolute;max-width:none;transform:translate(-50%,-50%);' +
+    '  -webkit-user-drag:none;user-select:none;touch-action:none}' +
+    // Reframe mode (double-click): the full image spills past the mask. The
+    // spill layer is sized to the IMAGE bounds so its corners are where the
+    // resize handles belong. The ghost <img> inside is translucent; the real
+    // clipped <img> underneath shows the opaque in-mask crop.
+    '.spill{position:absolute;transform:translate(-50%,-50%);display:none;z-index:1;' +
+    '  cursor:grab;touch-action:none}' +
+    ':host([data-panning]) .spill{cursor:grabbing}' +
+    '.spill .ghost{position:absolute;inset:0;width:100%;height:100%;opacity:.35;' +
+    '  pointer-events:none;-webkit-user-drag:none;user-select:none;' +
+    '  box-shadow:0 0 0 1px rgba(0,0,0,.2),0 12px 32px rgba(0,0,0,.2)}' +
+    '.spill .handle{position:absolute;width:12px;height:12px;border-radius:50%;' +
+    '  background:#fff;box-shadow:0 0 0 1.5px #c96442,0 1px 3px rgba(0,0,0,.3);' +
+    '  transform:translate(-50%,-50%)}' +
+    '.spill .handle[data-c=nw]{left:0;top:0;cursor:nwse-resize}' +
+    '.spill .handle[data-c=ne]{left:100%;top:0;cursor:nesw-resize}' +
+    '.spill .handle[data-c=sw]{left:0;top:100%;cursor:nesw-resize}' +
+    '.spill .handle[data-c=se]{left:100%;top:100%;cursor:nwse-resize}' +
+    ':host([data-reframe]){z-index:10}' +
+    ':host([data-reframe]) .spill{display:block}' +
+    ':host([data-reframe]) .frame{box-shadow:0 0 0 2px #c96442}' +
+    '.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;' +
+    '  justify-content:center;gap:6px;text-align:center;padding:12px;box-sizing:border-box;' +
+    '  cursor:pointer;user-select:none}' +
+    '.empty svg{opacity:.45}' +
+    '.empty .cap{max-width:90%;font-weight:500;letter-spacing:.01em}' +
+    '.empty .sub{font-size:11px}' +
+    '.empty .sub u{text-underline-offset:2px;text-decoration-color:rgba(0,0,0,.25)}' +
+    '.empty:hover .sub u{color:rgba(0,0,0,.75);text-decoration-color:currentColor}' +
+    ':host([data-over]) .frame{outline:2px solid #c96442;outline-offset:-2px;' +
+    '  background:rgba(201,100,66,.10)}' +
+    '.ring{position:absolute;inset:0;pointer-events:none;border:1.5px dashed rgba(0,0,0,.25);' +
+    '  transition:border-color .12s}' +
+    ':host([data-over]) .ring{border-color:#c96442}' +
+    ':host([data-filled]) .ring{display:none}' +
+    // Controls sit BELOW the mask (top:100%), absolutely positioned so the
+    // author-declared slot height is unaffected. The gap is padding, not a
+    // top offset, so the hover target stays contiguous with the frame.
+    '.ctl{position:absolute;top:100%;left:50%;transform:translateX(-50%);padding-top:8px;' +
+    '  display:flex;gap:6px;opacity:0;pointer-events:none;transition:opacity .12s;z-index:2;' +
+    '  white-space:nowrap}' +
+    ':host([data-filled][data-editable]:hover) .ctl,:host([data-reframe]) .ctl' +
+    '  {opacity:1;pointer-events:auto}' +
+    '.ctl button{appearance:none;border:0;border-radius:6px;padding:5px 10px;cursor:pointer;' +
+    '  background:rgba(0,0,0,.65);color:#fff;font:11px/1 system-ui,-apple-system,sans-serif;' +
+    '  backdrop-filter:blur(6px)}' +
+    '.ctl button:hover{background:rgba(0,0,0,.8)}' +
+    '.err{position:absolute;left:8px;bottom:8px;right:8px;color:#b3261e;font-size:11px;' +
+    '  background:rgba(255,255,255,.85);padding:4px 6px;border-radius:5px;pointer-events:none}';
 
-  renderList(){
-    const sel=this.candidates.filter(c=>c.selected).length;
-    this.$count.textContent=this.candidates.length?(sel+"/"+this.candidates.length):"";
-    this.$dl.disabled=!sel||this._busy;
-    if(!this.candidates.length){ this.$list.innerHTML='<div class="cf-empty">No candidates yet.</div>'; return; }
-    this.$list.innerHTML="";
-    this.candidates.forEach((c,idx)=>{
-      const card=document.createElement("div");
-      card.className="cf-card"+(c.selected?" sel":"");
-      card.setAttribute("role","button");
-      card.setAttribute("aria-pressed",String(c.selected));
-      card.innerHTML=
-        '<img class="cf-thumb" alt="Page '+c.page+' preview" src="'+c.thumb+'"/>'+
-        '<div class="cf-meta">'+
-          '<div class="cf-page">Page '+c.page+'</div>'+
-          '<div class="cf-ctitle" title="'+esc(c.title)+'">'+esc(c.title)+'</div>'+
-          '<div class="cf-tags"><span class="cf-kinds">'+
-            ['bar','line','pie'].map(k=>'<button type="button" class="cf-kind'+(c.kind===k?' on':'')+'" data-k="'+k+'">'+k+'</button>').join('')+
-          '</span><span class="cf-tag">'+Math.round(c.confidence*100)+'% conf</span><span class="cf-tag">'+c.rows.length+' rows</span></div>'+
-        '</div>'+
-        '<div class="cf-dot">'+(c.selected?ICON_CHECK:"")+'</div>';
-      card.addEventListener("click",()=>{ c.selected=!c.selected; this.renderList(); });
-      card.querySelectorAll(".cf-kind").forEach(btn=>{
-        btn.addEventListener("click",(e)=>{ e.stopPropagation(); c.kind=btn.getAttribute("data-k"); this.renderList(); });
+  const icon =
+    '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+    '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>' +
+    '<path d="m21 15-5-5L5 21"/></svg>';
+
+  class ImageSlot extends HTMLElement {
+    static get observedAttributes() {
+      return ['shape', 'radius', 'mask', 'fit', 'position', 'placeholder', 'src', 'id'];
+    }
+
+    constructor() {
+      super();
+      const root = this.attachShadow({ mode: 'open' });
+      // .spill and .ctl sit OUTSIDE .frame so overflow:hidden + border-radius
+      // on the frame (circle, pill, rounded) can't clip them.
+      root.innerHTML =
+        '<style>' + stylesheet + '</style>' +
+        '<div class="frame" part="frame">' +
+        '  <img part="image" alt="" draggable="false" loading="lazy" decoding="async" style="display:none">' +
+        '  <div class="empty" part="empty">' + icon +
+        '    <div class="cap"></div>' +
+        '    <div class="sub">or <u>browse files</u></div></div>' +
+        '  <div class="ring" part="ring"></div>' +
+        '</div>' +
+        '<div class="spill">' +
+        '  <img class="ghost" alt="" draggable="false">' +
+        '  <div class="handle" data-c="nw"></div><div class="handle" data-c="ne"></div>' +
+        '  <div class="handle" data-c="sw"></div><div class="handle" data-c="se"></div>' +
+        '</div>' +
+        '<div class="ctl"><button data-act="reframe" title="Adjust position &amp; size">Adjust</button>' +
+        '  <button data-act="replace" title="Replace image">Replace</button>' +
+        '  <button data-act="clear" title="Remove image">Remove</button></div>' +
+        '<input type="file" accept="' + ACCEPT.join(',') + '" hidden>';
+      this._frame = root.querySelector('.frame');
+      this._ring = root.querySelector('.ring');
+      this._img = root.querySelector('.frame img');
+      this._empty = root.querySelector('.empty');
+      this._cap = root.querySelector('.cap');
+      this._sub = root.querySelector('.sub');
+      this._spill = root.querySelector('.spill');
+      this._ghost = root.querySelector('.ghost');
+      this._err = null;
+      this._input = root.querySelector('input');
+      this._reframeBtn = root.querySelector('[data-act=reframe]');
+      this._depth = 0;
+      this._gen = 0;
+      this._view = { s: 1, x: 0, y: 0 };
+      this._subFn = () => this._render();
+      // Shadow-DOM listeners live with the shadow DOM — bound once here so
+      // disconnect/reconnect (e.g. React remount) doesn't stack handlers.
+      this._empty.addEventListener('click', () => this._input.click());
+      root.addEventListener('click', (e) => {
+        const act = e.target && e.target.getAttribute && e.target.getAttribute('data-act');
+        // Keep control clicks from bubbling to a clickable parent (card open / zoom).
+        if (act) { e.stopPropagation(); }
+        if (act === 'reframe') {
+          if (this.hasAttribute('data-reframe')) this._exitReframe(true);
+          else if (this._reframes()) this._enterReframe();
+        }
+        if (act === 'replace') { this._exitReframe(true); this._input.click(); }
+        if (act === 'clear') {
+          this._exitReframe(false);
+          this._gen++;
+          this._local = null;
+          if (this.id) setSlot(this.id, null); else this._render();
+        }
       });
-      this.$list.appendChild(card);
-    });
-  }
-
-  async exportXlsx(){
-    const sel=this.candidates.filter(c=>c.selected);
-    if(!sel.length) return;
-    this._busy=true; this.$dl.disabled=true; this.setStatus("Building workbook…",false);
-    try{
-      const blob=await this.buildXlsx(sel);
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a"); a.href=url; a.download="chartforge-charts.xlsx"; a.click();
-      setTimeout(()=>URL.revokeObjectURL(url),4000);
-      this.setStatus("Workbook downloaded · "+sel.length+" chart "+(sel.length===1?"sheet":"sheets"),false);
-    }catch(err){
-      console.error(err); this.setStatus("Export failed — could not build the workbook.",true);
-    }finally{ this._busy=false; this.$dl.disabled=false; }
-  }
-
-  // ---- XLSX (OOXML) with native editable charts ----
-  async buildXlsx(cands){
-    const zip=new JSZip();
-    const colL=(n)=>{ let s=""; n++; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=(n-m-1)/26|0; } return s; };
-
-    const sheetMetas=cands.map((c,i)=>{
-      const rows=c.rows.slice(0,12).map(r=>({label:String(r.label),value:Number(r.value)||0}));
-      let name=(c.title||("Chart "+(i+1))).replace(/[\\\/\?\*\[\]:]/g,"").slice(0,28).trim()||("Chart "+(i+1));
-      return { id:i+1, name, kind:c.kind, rows };
-    });
-    // de-dup names
-    const seen={}; sheetMetas.forEach(m=>{ let n=m.name,k=1; while(seen[n.toLowerCase()]){ n=m.name.slice(0,25)+" "+(++k); } seen[n.toLowerCase()]=1; m.name=n; });
-
-    // [Content_Types].xml
-    let ct='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
-      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
-      '<Default Extension="xml" ContentType="application/xml"/>'+
-      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
-      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>';
-    sheetMetas.forEach(m=>{
-      ct+='<Override PartName="/xl/worksheets/sheet'+m.id+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
-      ct+='<Override PartName="/xl/drawings/drawing'+m.id+'.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>';
-      ct+='<Override PartName="/xl/charts/chart'+m.id+'.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>';
-    });
-    ct+='</Types>';
-    zip.file("[Content_Types].xml",ct);
-
-    zip.file("_rels/.rels",'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
-
-    // workbook + rels
-    let wb='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>';
-    sheetMetas.forEach(m=>{ wb+='<sheet name="'+esc(m.name)+'" sheetId="'+m.id+'" r:id="rId'+m.id+'"/>'; });
-    wb+='</sheets></workbook>';
-    zip.file("xl/workbook.xml",wb);
-
-    let wbr='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
-    sheetMetas.forEach(m=>{ wbr+='<Relationship Id="rId'+m.id+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+m.id+'.xml"/>'; });
-    wbr+='<Relationship Id="rId'+(sheetMetas.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
-    wbr+='</Relationships>';
-    zip.file("xl/_rels/workbook.xml.rels",wbr);
-
-    zip.file("xl/styles.xml",'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>');
-
-    sheetMetas.forEach(m=>{
-      const n=m.rows.length;
-      // worksheet
-      let sh='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:B'+(n+1)+'"/><sheetData>';
-      sh+='<row r="1"><c r="A1" t="inlineStr"><is><t>Label</t></is></c><c r="B1" t="inlineStr"><is><t>Value</t></is></c></row>';
-      m.rows.forEach((row,i)=>{
-        const rr=i+2;
-        sh+='<row r="'+rr+'"><c r="A'+rr+'" t="inlineStr"><is><t>'+esc(row.label)+'</t></is></c><c r="B'+rr+'"><v>'+row.value+'</v></c></row>';
+      this._input.addEventListener('change', () => {
+        const f = this._input.files && this._input.files[0];
+        if (f) this._ingest(f);
+        this._input.value = '';
       });
-      sh+='</sheetData><drawing r:id="rId1"/></worksheet>';
-      zip.file("xl/worksheets/sheet"+m.id+".xml",sh);
-      zip.file("xl/worksheets/_rels/sheet"+m.id+".xml.rels",'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+m.id+'.xml"/></Relationships>');
-
-      // drawing (anchors chart)
-      zip.file("xl/drawings/drawing"+m.id+".xml",'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>12</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>22</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart '+m.id+'"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>');
-      zip.file("xl/drawings/_rels/drawing"+m.id+".xml.rels",'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart'+m.id+'.xml"/></Relationships>');
-
-      // chart
-      zip.file("xl/charts/chart"+m.id+".xml",this.chartXml(m));
-    });
-
-    return await zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  }
-
-  chartXml(m){
-    const sheet=m.name.replace(/'/g,"''");
-    const q="'"+sheet+"'";
-    const n=m.rows.length;
-    const catF=q+"!$A$2:$A$"+(n+1);
-    const valF=q+"!$B$2:$B$"+(n+1);
-    const titleF=q+"!$B$1";
-    let strCache='<c:strCache><c:ptCount val="'+n+'"/>';
-    m.rows.forEach((r,i)=>{ strCache+='<c:pt idx="'+i+'"><c:v>'+esc(r.label)+'</c:v></c:pt>'; });
-    strCache+='</c:strCache>';
-    let numCache='<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="'+n+'"/>';
-    m.rows.forEach((r,i)=>{ numCache+='<c:pt idx="'+i+'"><c:v>'+r.value+'</c:v></c:pt>'; });
-    numCache+='</c:numCache>';
-
-    const cat='<c:cat><c:strRef><c:f>'+esc(catF)+'</c:f>'+strCache+'</c:strRef></c:cat>';
-    const val='<c:val><c:numRef><c:f>'+esc(valF)+'</c:f>'+numCache+'</c:numRef></c:val>';
-    const serTx='<c:tx><c:strRef><c:f>'+esc(titleF)+'</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Value</c:v></c:pt></c:strCache></c:strRef></c:tx>';
-    const titleEl='<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>'+esc(m.name)+'</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>';
-
-    let plot;
-    if(m.kind==="pie"){
-      plot='<c:pieChart><c:varyColors val="1"/><c:ser><c:idx val="0"/><c:order val="0"/>'+serTx+cat+val+'</c:ser><c:firstSliceAng val="0"/></c:pieChart>';
-    }else if(m.kind==="line"){
-      plot='<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:idx val="0"/><c:order val="0"/>'+serTx+'<c:marker><c:symbol val="circle"/></c:marker>'+cat+val+'<c:smooth val="0"/></c:ser><c:marker val="1"/><c:axId val="111"/><c:axId val="222"/></c:lineChart>'+this.axes();
-    }else{
-      plot='<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/><c:ser><c:idx val="0"/><c:order val="0"/>'+serTx+cat+val+'</c:ser><c:gapWidth val="80"/><c:axId val="111"/><c:axId val="222"/></c:barChart>'+this.axes();
+      // naturalWidth/Height aren't known until load — re-apply so the cover
+      // baseline is computed from real dimensions, not the 100%×100% fallback.
+      this._img.addEventListener('load', () => this._applyView());
+      // Gated on editable + fit=cover so share links and contain/fill slots
+      // stay static.
+      this.addEventListener('dblclick', (e) => {
+        if (!this.hasAttribute('data-editable') || !this._reframes()) return;
+        e.preventDefault();
+        if (this.hasAttribute('data-reframe')) this._exitReframe(true);
+        else this._enterReframe();
+      });
+      // Pan + resize both originate on the spill layer. A handle pointerdown
+      // drives an aspect-locked resize anchored at the opposite corner; any
+      // other pointerdown on the spill pans. Offsets are frame-% so a
+      // reframed slot survives responsive resize / PPTX export.
+      this._spill.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || !this.hasAttribute('data-reframe')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this._spill.setPointerCapture(e.pointerId);
+        const rect = this.getBoundingClientRect();
+        const fw = rect.width || 1, fh = rect.height || 1;
+        const corner = e.target.getAttribute && e.target.getAttribute('data-c');
+        let move;
+        if (corner) {
+          // Resize about the OPPOSITE corner. Viewport-px throughout (rect
+          // fw/fh, not clientWidth) so the math survives a transform:scale()
+          // ancestor — deck_stage renders slides scaled-to-fit.
+          const iw = this._img.naturalWidth || 1, ih = this._img.naturalHeight || 1;
+          const base = Math.max(fw / iw, fh / ih);
+          const sx = corner.includes('e') ? 1 : -1;
+          const sy = corner.includes('s') ? 1 : -1;
+          const s0 = this._view.s;
+          const w0 = iw * base * s0, h0 = ih * base * s0;
+          const cx0 = (50 + this._view.x) / 100 * fw;
+          const cy0 = (50 + this._view.y) / 100 * fh;
+          const ox = cx0 - sx * w0 / 2, oy = cy0 - sy * h0 / 2;
+          const diag0 = Math.hypot(w0, h0);
+          const ux = sx * w0 / diag0, uy = sy * h0 / diag0;
+          move = (ev) => {
+            const proj = (ev.clientX - rect.left - ox) * ux +
+                         (ev.clientY - rect.top - oy) * uy;
+            const s = clampS(s0 * proj / diag0);
+            const d = diag0 * s / s0;
+            this._view.s = s;
+            this._view.x = (ox + ux * d / 2) / fw * 100 - 50;
+            this._view.y = (oy + uy * d / 2) / fh * 100 - 50;
+            this._clampView();
+            this._applyView();
+          };
+        } else {
+          this.setAttribute('data-panning', '');
+          const start = { px: e.clientX, py: e.clientY, x: this._view.x, y: this._view.y };
+          move = (ev) => {
+            this._view.x = start.x + (ev.clientX - start.px) / fw * 100;
+            this._view.y = start.y + (ev.clientY - start.py) / fh * 100;
+            this._clampView();
+            this._applyView();
+          };
+        }
+        const up = () => {
+          try { this._spill.releasePointerCapture(e.pointerId); } catch {}
+          this._spill.removeEventListener('pointermove', move);
+          this._spill.removeEventListener('pointerup', up);
+          this._spill.removeEventListener('pointercancel', up);
+          this.removeAttribute('data-panning');
+          this._dragUp = null;
+        };
+        // Stashed so _exitReframe (Escape / outside-click mid-drag) can
+        // tear the capture + listeners down synchronously.
+        this._dragUp = up;
+        this._spill.addEventListener('pointermove', move);
+        this._spill.addEventListener('pointerup', up);
+        this._spill.addEventListener('pointercancel', up);
+      });
+      // Wheel zoom stays available inside reframe mode as a trackpad nicety —
+      // zooms toward the cursor (offset' = cursor·(1-k) + offset·k).
+      this.addEventListener('wheel', (e) => {
+        if (!this.hasAttribute('data-reframe')) return;
+        e.preventDefault();
+        const r = this.getBoundingClientRect();
+        const cx = (e.clientX - r.left) / r.width * 100 - 50;
+        const cy = (e.clientY - r.top) / r.height * 100 - 50;
+        const prev = this._view.s;
+        const next = clampS(prev * Math.pow(1.0015, -e.deltaY));
+        if (next === prev) return;
+        const k = next / prev;
+        this._view.s = next;
+        this._view.x = cx * (1 - k) + this._view.x * k;
+        this._view.y = cy * (1 - k) + this._view.y * k;
+        this._clampView();
+        this._applyView();
+      }, { passive: false });
     }
-    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:chart>'+titleEl+'<c:plotArea><c:layout/>'+plot+'</c:plotArea><c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>';
-  }
-  axes(){
-    return '<c:catAx><c:axId val="111"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="222"/></c:catAx>'+
-           '<c:valAx><c:axId val="222"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="111"/></c:valAx>';
-  }
-}
 
-if(!customElements.get("chartforge-app")) customElements.define("chartforge-app",ChartForge);
+    connectedCallback() {
+      // Warn once per page — an id-less slot works for the session but
+      // cannot persist, and two id-less slots would share nothing.
+      if (!this.id && !ImageSlot._warned) {
+        ImageSlot._warned = true;
+        console.warn('<image-slot> without an id will not persist its dropped image.');
+      }
+      this.addEventListener('dragenter', this);
+      this.addEventListener('dragover', this);
+      this.addEventListener('dragleave', this);
+      this.addEventListener('drop', this);
+      subs.add(this._subFn);
+      // width%/height% in _applyView encode the frame aspect at call time —
+      // a host resize (responsive grid, pane divider) would stretch the
+      // image until the next _render. Re-render on size change: _render()
+      // re-seeds _view from stored before clamp/apply, so a shrink→grow
+      // cycle round-trips instead of ratcheting x/y toward the narrower
+      // frame's clamp range.
+      this._ro = new ResizeObserver(() => this._render());
+      this._ro.observe(this);
+      load();
+      this._render();
+    }
+
+    disconnectedCallback() {
+      subs.delete(this._subFn);
+      this.removeEventListener('dragenter', this);
+      this.removeEventListener('dragover', this);
+      this.removeEventListener('dragleave', this);
+      this.removeEventListener('drop', this);
+      if (this._ro) { this._ro.disconnect(); this._ro = null; }
+      this._exitReframe(false);
+    }
+
+    _enterReframe() {
+      if (this.hasAttribute('data-reframe')) return;
+      this.setAttribute('data-reframe', '');
+      if (this._reframeBtn) this._reframeBtn.textContent = 'Done';
+      this._applyView();
+      // Close on click outside (the spill handler stopPropagation()s so
+      // in-image drags don't reach this) and on Escape. Listeners are held
+      // on the instance so _exitReframe / disconnectedCallback can detach
+      // exactly what was attached.
+      this._outside = (e) => {
+        if (e.composedPath && e.composedPath().includes(this)) return;
+        this._exitReframe(true);
+      };
+      this._esc = (e) => { if (e.key === 'Escape') this._exitReframe(true); };
+      document.addEventListener('pointerdown', this._outside, true);
+      document.addEventListener('keydown', this._esc, true);
+    }
+
+    _exitReframe(commit) {
+      if (!this.hasAttribute('data-reframe')) return;
+      if (this._dragUp) this._dragUp();
+      this.removeAttribute('data-reframe');
+      if (this._reframeBtn) this._reframeBtn.textContent = 'Adjust';
+      this.removeAttribute('data-panning');
+      if (this._outside) document.removeEventListener('pointerdown', this._outside, true);
+      if (this._esc) document.removeEventListener('keydown', this._esc, true);
+      this._outside = this._esc = null;
+      if (commit) this._commitView();
+    }
+
+    attributeChangedCallback() { if (this.shadowRoot) this._render(); }
+
+    // handleEvent — one listener object for all four drag events keeps the
+    // add/remove symmetric and the depth counter correct.
+    handleEvent(e) {
+      if (e.type === 'dragenter' || e.type === 'dragover') {
+        // Without preventDefault the browser never fires 'drop'.
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        if (e.type === 'dragenter') this._depth++;
+        this.setAttribute('data-over', '');
+      } else if (e.type === 'dragleave') {
+        // dragenter/leave fire for every descendant crossing — count depth
+        // so hovering the icon inside the empty state doesn't flicker.
+        if (--this._depth <= 0) { this._depth = 0; this.removeAttribute('data-over'); }
+      } else if (e.type === 'drop') {
+        e.preventDefault();
+        e.stopPropagation();
+        this._depth = 0;
+        this.removeAttribute('data-over');
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) this._ingest(f);
+      }
+    }
+
+    async _ingest(file) {
+      this._setError(null);
+      if (!file || ACCEPT.indexOf(file.type) < 0) {
+        this._setError('Drop a PNG, JPEG, WebP, or AVIF image.');
+        return;
+      }
+      // toDataUrl can take hundreds of ms on a large photo. A Clear or a
+      // newer drop during that window would be clobbered when this await
+      // resumes — bump + capture a generation so stale encodes bail.
+      const gen = ++this._gen;
+      try {
+        const w = this.clientWidth || this.offsetWidth || MAX_DIM;
+        const url = await toDataUrl(file, w);
+        if (gen !== this._gen) return;
+        // Only exit reframe once the new image is in hand — a rejected type
+        // or decode failure leaves the in-progress crop untouched.
+        this._exitReframe(false);
+        const val = { u: url, s: 1, x: 0, y: 0 };
+        setSlot(this.id || '', val);
+        // Keep a session-local copy for id-less slots so the drop still
+        // shows, even though it cannot persist.
+        if (!this.id) { this._local = val; this._render(); }
+      } catch (err) {
+        if (gen !== this._gen) return;
+        this._setError('Could not read that image.');
+        console.warn('<image-slot> ingest failed:', err);
+      }
+    }
+
+    _setError(msg) {
+      if (this._err) { this._err.remove(); this._err = null; }
+      if (!msg) return;
+      const d = document.createElement('div');
+      d.className = 'err'; d.textContent = msg;
+      this.shadowRoot.appendChild(d);
+      this._err = d;
+      setTimeout(() => { if (this._err === d) { d.remove(); this._err = null; } }, 3000);
+    }
+
+    // Reframing (pan/resize) is only meaningful for fit=cover — contain/fill
+    // keep the old object-fit path and double-click is a no-op.
+    _reframes() {
+      return this.hasAttribute('data-filled') &&
+        (this.getAttribute('fit') || 'cover') === 'cover';
+    }
+
+    // Cover-baseline geometry, shared by clamp/apply/resize. Null until the
+    // img has loaded (naturalWidth is 0 before that) or when the slot has no
+    // layout box — ResizeObserver fires with a 0×0 rect under display:none,
+    // and clamping against a degenerate 1×1 frame would silently pull the
+    // stored pan toward zero.
+    _geom() {
+      const iw = this._img.naturalWidth, ih = this._img.naturalHeight;
+      const fw = this.clientWidth, fh = this.clientHeight;
+      if (!iw || !ih || !fw || !fh) return null;
+      return { iw, ih, fw, fh, base: Math.max(fw / iw, fh / ih) };
+    }
+
+    _clampView() {
+      // Pan range on each axis is half the overflow past the frame edge.
+      const g = this._geom();
+      if (!g) return;
+      const mx = Math.max(0, (g.iw * g.base * this._view.s / g.fw - 1) * 50);
+      const my = Math.max(0, (g.ih * g.base * this._view.s / g.fh - 1) * 50);
+      this._view.x = Math.max(-mx, Math.min(mx, this._view.x));
+      this._view.y = Math.max(-my, Math.min(my, this._view.y));
+    }
+
+    _applyView() {
+      const g = this._geom();
+      const fit = this.getAttribute('fit') || 'cover';
+      if (fit !== 'cover' || !g) {
+        // Non-cover, or dimensions not known yet (before img load).
+        this._img.style.width = '100%';
+        this._img.style.height = '100%';
+        this._img.style.left = '50%';
+        this._img.style.top = '50%';
+        this._img.style.objectFit = fit;
+        this._img.style.objectPosition = this.getAttribute('position') || '50% 50%';
+        return;
+      }
+      // Cover baseline: img fills the frame on its tighter axis at s=1, so
+      // pan works immediately on the overflowing axis without zooming first.
+      // Width/height and left/top are all frame-% — depends only on the
+      // frame aspect ratio, so a responsive resize keeps the same crop. The
+      // spill layer mirrors the same box so its corners = image corners.
+      const k = g.base * this._view.s;
+      const w = (g.iw * k / g.fw * 100) + '%';
+      const h = (g.ih * k / g.fh * 100) + '%';
+      const l = (50 + this._view.x) + '%';
+      const t = (50 + this._view.y) + '%';
+      this._img.style.width = w; this._img.style.height = h;
+      this._img.style.left = l; this._img.style.top = t;
+      this._img.style.objectFit = '';
+      this._spill.style.width = w; this._spill.style.height = h;
+      this._spill.style.left = l; this._spill.style.top = t;
+    }
+
+    _commitView() {
+      const v = { s: this._view.s, x: this._view.x, y: this._view.y };
+      if (this._userUrl) v.u = this._userUrl;
+      // Framing-only (no u) persists too so an author-src slot remembers its
+      // crop; clearing the sidecar still falls through to src=.
+      if (this.id) setSlot(this.id, v);
+      else { this._local = v; }
+    }
+
+    _render() {
+      // Shape / mask. Presets use border-radius so the dashed ring can
+      // follow the rounded outline; clip-path is only applied for an
+      // explicit `mask` (the ring is hidden there since a rectangle
+      // dashed border chopped by an arbitrary polygon looks broken).
+      const mask = this.getAttribute('mask');
+      const shape = (this.getAttribute('shape') || 'rounded').toLowerCase();
+      let radius = '';
+      if (shape === 'circle') radius = '50%';
+      else if (shape === 'pill') radius = '9999px';
+      else if (shape === 'rounded') {
+        const n = parseFloat(this.getAttribute('radius'));
+        radius = (Number.isFinite(n) ? n : 12) + 'px';
+      }
+      this._frame.style.borderRadius = mask ? '' : radius;
+      this._frame.style.clipPath = mask || '';
+      this._ring.style.borderRadius = mask ? '' : radius;
+      this._ring.style.display = mask ? 'none' : '';
+
+      // Controls and reframe entry gate on this so share links stay read-only.
+      const editable = !!(window.omelette && window.omelette.writeFile);
+      this.toggleAttribute('data-editable', editable);
+      this._sub.style.display = editable ? '' : 'none';
+
+      // Content. The sidecar is also writable by the agent's write_file
+      // tool, so its value isn't guaranteed canvas-originated — only accept
+      // data:image/ URLs from it. The `src` attribute is author-controlled
+      // (Claude wrote it into the HTML) so it passes through unchanged.
+      let stored = this.id ? getSlot(this.id) : this._local;
+      if (stored && stored.u && !/^data:image\//i.test(stored.u) && !/^slot-img\/[^\/\\:?#]+\.(png|jpe?g|webp|avif)$/i.test(stored.u)) stored = null;
+      const srcAttr = this.getAttribute('src') || '';
+      this._userUrl = (stored && stored.u) || null;
+      const url = this._userUrl || srcAttr;
+      // Don't clobber an in-flight reframe with a store-triggered re-render.
+      if (!this.hasAttribute('data-reframe')) {
+        this._view = {
+          s: stored && Number.isFinite(stored.s) ? clampS(stored.s) : 1,
+          x: stored && Number.isFinite(stored.x) ? stored.x : 0,
+          y: stored && Number.isFinite(stored.y) ? stored.y : 0,
+        };
+      }
+      this._cap.textContent = this.getAttribute('placeholder') || 'Drop an image';
+      // Toggle via style.display — the [hidden] attribute alone loses to
+      // the display:flex / display:block rules in the stylesheet above.
+      if (url) {
+        if (this._img.getAttribute('src') !== url) {
+          this._img.src = url;
+          this._ghost.src = url;
+        }
+        this._img.style.display = 'block';
+        this._empty.style.display = 'none';
+        this.setAttribute('data-filled', '');
+        this._clampView();
+        this._applyView();
+      } else {
+        this._img.style.display = 'none';
+        this._img.removeAttribute('src');
+        this._ghost.removeAttribute('src');
+        // viewers (no editor runtime) should never see the drop-target UI
+        this._empty.style.display = editable ? 'flex' : 'none';
+        this._ring.style.display = (mask || !editable) ? 'none' : '';
+        this.removeAttribute('data-filled');
+      }
+    }
+  }
+
+  if (!customElements.get('image-slot')) {
+    customElements.define('image-slot', ImageSlot);
+  }
+})();
