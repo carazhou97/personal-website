@@ -1,1163 +1,896 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="./support.js"></script>
-</head>
-<body>
-<x-dc>
-<helmet>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
-<style>
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  html,body{margin:0}
-  ::-webkit-scrollbar{width:10px;height:10px}
-  ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.18);border-radius:6px}
-  [role="button"]:focus-visible,.tomb:focus-visible,.nav-row:focus-visible{outline:2px solid currentColor;outline-offset:3px}
-  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
-  @keyframes mFade{from{opacity:0}to{opacity:1}}
-  @keyframes mRise{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
-  @keyframes flipZoom{0%{opacity:0;transform:perspective(1500px) rotateY(90deg) scale(.86)}42%{opacity:1}74%{transform:perspective(1500px) rotateY(-8deg) scale(1.025)}100%{opacity:1;transform:perspective(1500px) rotateY(0deg) scale(1)}}
-  @keyframes dealPop{0%{opacity:0;transform:scale(.9)}60%{opacity:1}100%{opacity:1;transform:scale(1)}}
-  /* develop-on-scroll: rows surface from an under-exposed blur into focus */
-  .led-row{opacity:0;filter:blur(7px) saturate(.25) brightness(1.04);transform:translateY(16px);transition:opacity .75s ease,filter .75s ease,transform .75s cubic-bezier(.2,.7,.3,1)}
-  .led-row.in{opacity:1;filter:none;transform:none}
-  @media (prefers-reduced-motion: reduce){ .led-row{opacity:1;filter:none;transform:none} }
-  </style>
-  <script type="module" src="./bloom.js"></script>
-  <script type="module" src="./chartforge.js"></script>
-  <style>
-  /* ---------- MOBILE ---------- */
-  @media (max-width: 860px){
-    .sc-root{flex-direction:column !important}
-    .sc-nav{position:sticky !important;top:0 !important;height:auto !important;width:100% !important;flex-direction:row !important;align-items:center !important;justify-content:flex-start !important;padding:9px 14px !important;border-right:none !important;border-bottom:1px solid rgba(0,0,0,.12) !important;z-index:50 !important}
-    .sc-nav > div{display:flex !important;flex-direction:row !important;gap:6px !important;width:100% !important;overflow-x:auto !important;-webkit-overflow-scrolling:touch !important}
-    .nav-row{font-size:15px !important;padding:7px 13px !important;white-space:nowrap !important;flex:none !important;margin:0 !important}
-    .nav-num,.nav-row sup{display:none !important}
-    .sc-corner{display:none !important}
-    .railProg{display:none !important}
-    section[data-section]{padding:34px 18px !important;min-height:0 !important}
-    section[data-section] > h1,.sec-head h1{font-size:38px !important;line-height:1.05 !important}
-    .sec-head{flex-wrap:wrap !important;gap:6px 16px !important;margin-bottom:18px !important}
-    .sec-tag{display:none !important}
-    .sc-about-body{grid-template-columns:1fr !important;gap:20px !important;margin-top:22px !important}
-    .sc-about-body p{font-size:20px !important}
-    .sc-foot{grid-template-columns:1fr !important;column-gap:0 !important;row-gap:13px !important}
-    .sc-cards2{grid-template-columns:1fr !important}
-    .tomb-track{grid-template-columns:repeat(2,1fr) !important}
-    .sc-social{grid-template-columns:repeat(2,1fr) !important;gap:14px !important}
-    .sc-standup{grid-template-columns:1fr !important}
-    .sc-objrow{grid-template-columns:26px 1fr !important;column-gap:8px !important}
-    .obj-meta{display:none !important}
-    .sc-reader-grid{grid-template-columns:1fr !important;gap:24px !important;padding:64px 18px 80px !important}
-    .sc-reader-title{position:static !important}
-    .sc-reader-title h1{font-size:34px !important}
-    .dcBody{flex-direction:column !important;gap:18px !important}
-    .dcLeft{width:100% !important}
-    .dcDiv{width:auto !important;height:1px !important}
-    #dealCardPanel{padding:28px 22px 26px !important}
-    .contactPanel{padding:64px 22px 44px !important}
-    .contactSig{flex-wrap:wrap !important;row-gap:8px !important}
-    section[data-section="contact"]{min-height:100vh !important;padding:0 !important}
+import * as THREE from "https://esm.sh/three@0.160.0";
+import { OrbitControls } from "https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js?deps=three@0.160.0";
+import GUI from "https://esm.sh/lil-gui@0.19.2";
+
+const MAX_LAYOUT_PETALS = 150;
+
+/**
+ * Boots the phyllotaxis flower scene + lil-gui into the given containers.
+ * Returns a cleanup function that tears down Three.js, the GUI and listeners.
+ */
+export function createFlowerScene(
+  canvasContainer,
+  guiContainer,
+  tabsContainer,
+) {
+  const params = {
+    // ===== Phyllotaxis =====
+    numPetals: 36,
+    goldenAngle: 137.5,
+    // true only while the Golden Spiral demo is adding/removing seeds; default
+    // flower layout keeps filling the current petal count.
+    stableLayout: false,
+    // false → lay petals in concentric rings (the "mechanical" wrong layout)
+    outwardPush: true,
+    radius: 0.14,
+    radiusBias: 1.15,
+    height: 0.13,
+    heightBias: 1.2,
+    scaleInner: 0.5,
+    tiltInner: 0.08,
+    outAngle: 68,
+    tiltBias: 2.2,
+    // ===== Growth wavefront =====
+    bloom: 0.0,
+    bloomMax: 0.78,
+    transition: 0.35,
+    // Scroll drives the bloom by default; the GUI checkbox re-enables the loop.
+    animate: false,
+    // ===== Single petal =====
+    petalLen: 0.95,
+    curlClosed: 1.7,
+    curlOpen: -0.35,
+    curlBias: 2.3,
+    propagation: 1.2,
+    stemWidth: 0.03,
+    stemEnd: 0.04,
+    w0: 0.16,
+    w1: 0.28,
+    w2: 0.3,
+    w3: 0.2,
+    cup: 0.4,
+    sideCurl: 0.45,
+    waveAmp: 0.035,
+    waveFreq: 11,
+    asym: 0.08,
+    // ===== De-interleave / noise / wind =====
+    jitter: 0.04,
+    noiseAmp: 0.045,
+    noiseFreq: 5.0,
+    windAmp: 0.09,
+    windSpeed: 1.0,
+    windHeading: 35,
+    shellGap: 0.14,
+    // How much a furled petal inflates while closed (width / cup). Defaults
+    // reproduce the original hard-coded values; the dahlia lowers them so its
+    // broad cupped petals don't balloon into a smooth onion before opening.
+    wrapWidth: 0.35,
+    wrapCup: 0.5,
+    // ===== Render style: flat per-petal gradient (no lighting) =====
+    flat: true,
+  };
+
+  // ===== ramp texture (R=width, G=curlDensity) =====
+  const RAMP_RES = 256;
+  const rampData = new Float32Array(RAMP_RES * 4);
+  const rampTex = new THREE.DataTexture(
+    rampData,
+    RAMP_RES,
+    1,
+    THREE.RGBAFormat,
+    THREE.FloatType,
+  );
+  rampTex.minFilter = rampTex.magFilter = THREE.LinearFilter;
+
+  function catmullRom(pts, t) {
+    const n = pts.length - 1;
+    const f = Math.min(t * n, n - 1e-6);
+    const i = Math.floor(f),
+      s = f - i;
+    const p0 = pts[Math.max(i - 1, 0)],
+      p1 = pts[i],
+      p2 = pts[i + 1],
+      p3 = pts[Math.min(i + 2, n)];
+    return (
+      0.5 *
+      (2 * p1 +
+        (-p0 + p2) * s +
+        (2 * p0 - 5 * p1 + 4 * p2 - p3) * s * s +
+        (-p0 + 3 * p1 - 3 * p2 + p3) * s * s * s)
+    );
   }
-  /* ---------- DEALS: infinite tombstone wall ---------- */
-  @keyframes marq{to{transform:translateX(-50%)}}
-  .tomb-row{overflow:visible}
-  .tomb-track{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-  .tomb{min-width:0;position:relative;background:#f4efe2;border-radius:2px;padding:15px 15px 12px;cursor:pointer;box-shadow:0 2px 0 rgba(90,24,8,.16),0 14px 28px -16px rgba(50,14,4,.55);transition:transform .25s cubic-bezier(.2,.7,.3,1),box-shadow .25s ease}
-  .tomb:hover{transform:translateY(-4px);box-shadow:0 22px 40px -18px rgba(35,8,2,.6)}
-  .tomb::before{content:'';position:absolute;inset:6px;border:1px solid rgba(160,52,24,.32);border-radius:1px;pointer-events:none}
-  .tomb::after{content:'';position:absolute;inset:9px;border:1px solid rgba(160,52,24,.13);border-radius:1px;pointer-events:none}
-</style>
-</helmet>
-
-<div class="sc-root" style="display:flex;align-items:flex-start;background:#FBF7F0;font-family:'Newsreader',Georgia,serif;color:#1b1714">
-
-  <!-- ===================== PERSISTENT LEFT NAV ===================== -->
-  <nav class="sc-nav" ref="{{ navRef }}" style="position:sticky;top:0;height:100vh;width:230px;flex:none;background:#FBF7F0;border-right:1px solid rgba(0,0,0,.07);padding:38px 28px;display:flex;flex-direction:column;justify-content:space-between;z-index:30">
-    <div class="railProg" style="position:absolute;top:0;right:-1px;bottom:0;width:2px;background:rgba(0,0,0,.05)"><div ref="{{ progRef }}" style="position:absolute;top:0;left:0;width:100%;height:0%;background:#a44a24;transition:height .12s linear"></div></div>
-    <div>
-      <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="5">
-        <div onClick="{{ item.onClick }}" role="button" tabindex="0" onKeyDown="{{ btnKey }}" class="nav-row" style="{{ item.rowStyle }}">
-          <span style="{{ item.dotStyle }}"></span>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;color:#9a9081">{{ item.num }}</div>
-          <div style="{{ item.labelStyle }}">{{ item.label }}</div>
-        </div>
-      </sc-for>
-    </div>
-  </nav>
-
-  <!-- ===================== SCROLLING MAIN ===================== -->
-  <main ref="{{ scrollRef }}" style="flex:1;position:relative;min-width:0">
-
-    <!-- persistent corner mark -->
-    <div class="sc-corner" style="position:sticky;top:0;height:0;z-index:25;pointer-events:none">
-      <div style="position:absolute;right:26px;top:24px;width:40px;height:40px;border-radius:50%;background:#1b1714;display:flex;align-items:center;justify-content:center;pointer-events:auto;cursor:pointer">
-        <div style="width:15px;height:15px;border:2px solid #FBF7F0;border-radius:50%;position:relative"><div style="position:absolute;width:4px;height:4px;background:#FBF7F0;border-radius:50%;top:3.5px;left:3.5px"></div></div>
-      </div>
-    </div>
-
-    <!-- ---------- SECTION 1 : ABOUT ---------- -->
-    <section ref="{{ aboutRef }}" data-section="about" data-screen-label="01 About" style="min-height:100vh;background:#FBF7F0 url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%27260%27%20height=%27260%27%3E%3Cfilter%20id=%27p%27%3E%3CfeTurbulence%20type=%27fractalNoise%27%20baseFrequency=%27.6%27%20numOctaves=%272%27%20stitchTiles=%27stitch%27/%3E%3CfeColorMatrix%20type=%27saturate%27%20values=%270%27/%3E%3C/filter%3E%3Crect%20width=%27260%27%20height=%27260%27%20filter=%27url%28%23p%29%27%20opacity=%27.04%27/%3E%3C/svg%3E);padding:62px 76px 48px;display:flex;flex-direction:column">
-      <div class="led-row sec-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin:0 0 auto">
-        <div style="display:flex;align-items:baseline;gap:24px"><span style="font-family:'Newsreader',serif;font-weight:300;font-variant-numeric:lining-nums;font-size:88px;line-height:1;color:#d8ccb6;flex:none">01</span><h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:74px;letter-spacing:-.01em;margin:0">About</h1></div>
-        
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:64px;max-width:1180px;margin:40px 0 48px;align-self:center;width:100%" class="sc-about-body">
-        <div style="display:flex;flex-direction:column;gap:24px">
-          <p style="font-size:27px;line-height:1.36;margin:0;color:#1b1714;text-wrap:pretty">Hi, I’m Cara <span style="position:relative;display:inline-block;vertical-align:-3px"><span onClick="{{ toggleBaby }}" title="psst — click me" style="display:inline-block;cursor:pointer;transition:transform .2s ease" style-hover="transform:scale(1.18) rotate(-6deg)">👶</span><sc-if value="{{ babyOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);width:228px;background:#fff;color:#1b1714;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:13px 15px;box-shadow:0 14px 34px rgba(0,0,0,.28);z-index:40;font-family:'Newsreader',Georgia,serif;font-style:italic;font-size:15px;line-height:1.4;text-align:center"><span onClick="{{ toggleBaby }}" style="position:absolute;top:6px;right:9px;cursor:pointer;font-style:normal;font-family:'IBM Plex Mono',monospace;font-size:12px;color:rgba(255,255,255,.6)">×</span>trying to find a baby photo of me from my mom…<span style="position:absolute;top:100%;left:50%;transform:translateX(-50%);border:7px solid transparent;border-top-color:#fff"></span></span></sc-if></span>. I grew up between China and the U.S.<sup style="font-size:.5em">1</sup> 🇨🇳🇺🇸, moving between the deal room<sup style="font-size:.5em">2</sup> 📈 and the newsroom<sup style="font-size:.5em">3</sup> <span style="position:relative;display:inline-block;vertical-align:-3px"><span onClick="{{ toggleNews }}" title="psst — click me" style="display:inline-block;cursor:pointer;transition:transform .2s ease" style-hover="transform:scale(1.18) rotate(-6deg)">📰</span><sc-if value="{{ newsOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);width:230px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:10px;box-shadow:0 16px 40px rgba(0,0,0,.4);z-index:40"><span onClick="{{ toggleNews }}" style="position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:#1b1714;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3)">×</span><img src="uploads/caixin-cover.jpg" alt="Caixin Weekly cover" style="display:block;width:100%;height:auto;border-radius:4px"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;color:rgba(0,0,0,.55);text-align:center;margin-top:8px">Caixin Weekly · Jan 2020</span><span style="position:absolute;top:100%;left:50%;transform:translateX(-50%);border:7px solid transparent;border-top-color:#fff"></span></span></sc-if></span>. Somewhere along the way I grew wary of the next big bet. I’ve stood on the front line of the <span style="position:relative;display:inline-block"><span onClick="{{ toggleCrash }}" title="psst — click me" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;text-decoration-color:#a44a24">collapse</span><sup style="font-size:.5em">4</sup><sc-if value="{{ crashOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:50%;bottom:calc(100% + 14px);transform:translateX(-50%);width:300px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:10px;box-shadow:0 16px 40px rgba(0,0,0,.4);z-index:40"><span onClick="{{ toggleCrash }}" style="position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:#1b1714;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3)">×</span><img src="uploads/wsj-collapse.jpg" alt="WSJ breaking news" style="display:block;width:100%;height:auto;border-radius:4px"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;color:rgba(0,0,0,.55);text-align:center;margin-top:8px">WSJ · Mar 2020 · circuit-breaker halt</span><span style="position:absolute;top:100%;left:50%;transform:translateX(-50%);border:7px solid transparent;border-top-color:#fff"></span></span></sc-if></span>, and watched where the money ran<sup style="font-size:.5em">5</sup>.</p>
-          <p style="font-size:27px;line-height:1.36;margin:0;color:#1b1714;text-wrap:pretty">So now I question what everyone agrees on<sup style="font-size:.5em">6</sup>. That’s usually where the real risk is hiding.</p>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:24px">
-          <p style="font-size:27px;line-height:1.36;margin:0;color:#1b1714;text-wrap:pretty">Lately I’d rather build than cover. This website. An audience that reads me in two languages<sup style="font-size:.5em">7</sup> <span style="position:relative;display:inline-block;vertical-align:-2px"><span onClick="{{ toggleRed }}" title="psst — click me" style="cursor:pointer;display:inline-block;transition:transform .2s ease" style-hover="transform:scale(1.18) rotate(-6deg)">📕</span><sc-if value="{{ redOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);width:330px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:10px;box-shadow:0 16px 40px rgba(0,0,0,.28);z-index:40"><span onClick="{{ toggleRed }}" style="position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:#1b1714;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3)">×</span><img src="uploads/rednote-profile.jpg" alt="RedNote profile" style="display:block;width:100%;height:auto;border-radius:4px"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;color:rgba(0,0,0,.55);text-align:center;margin-top:8px">小童莱特 · RedNote · 10K followers</span><span style="position:absolute;top:100%;left:50%;transform:translateX(-50%);border:7px solid transparent;border-top-color:#fff"></span></span></sc-if></span>.</p>
-          <p style="font-size:27px;line-height:1.36;margin:0;color:#1b1714;text-wrap:pretty">Ask me anything about unbranded honesty, the deliberate emptiness, why optionality isn’t free, and the trap inside every optimization.</p>
-          <p style="font-size:27px;line-height:1.36;margin:0;color:#1b1714;text-wrap:pretty">If you can’t find me here, you’ll find me on a board or a court — surfing <span style="position:relative;display:inline-block;vertical-align:-2px"><span onClick="{{ toggleSurf }}" title="psst — click me" style="cursor:pointer;display:inline-block;transition:transform .2s ease" style-hover="transform:scale(1.18) rotate(-6deg)">🏄</span><sc-if value="{{ surfOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;bottom:calc(100% + 12px);width:300px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:10px;box-shadow:0 16px 40px rgba(0,0,0,.28);z-index:40"><span onClick="{{ toggleSurf }}" style="position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:#1b1714;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3)">×</span><img src="uploads/surfing-cara.jpg" alt="Cara surfing" style="display:block;width:100%;height:auto;border-radius:4px"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;color:rgba(0,0,0,.55);text-align:center;margin-top:8px">Puerto Rico · Aug 2023</span><span style="position:absolute;top:100%;right:20px;border:7px solid transparent;border-top-color:#fff"></span></span></sc-if></span>, snowboarding <span style="position:relative;display:inline-block;vertical-align:-2px"><span onClick="{{ toggleSnow }}" title="psst — click me" style="cursor:pointer;display:inline-block;transition:transform .2s ease" style-hover="transform:scale(1.18) rotate(-6deg)">🏂</span><sc-if value="{{ snowOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);width:290px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:10px;box-shadow:0 16px 40px rgba(0,0,0,.28);z-index:40"><span onClick="{{ toggleSnow }}" style="position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:#1b1714;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3)">×</span><img src="uploads/snowboard-cara.jpg" alt="Cara snowboarding" style="display:block;width:100%;height:auto;border-radius:4px"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;color:rgba(0,0,0,.55);text-align:center;margin-top:8px">on the mountain</span><span style="position:absolute;top:100%;left:50%;transform:translateX(-50%);border:7px solid transparent;border-top-color:#fff"></span></span></sc-if></span>, tennis <span style="position:relative;display:inline-block;vertical-align:-2px"><span onClick="{{ toggleTennis }}" title="psst — click me" style="cursor:pointer;display:inline-block;transition:transform .2s ease" style-hover="transform:scale(1.18) rotate(-6deg)">🎾</span><sc-if value="{{ tennisOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);width:260px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:10px;box-shadow:0 16px 40px rgba(0,0,0,.28);z-index:40"><span onClick="{{ toggleTennis }}" style="position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:#1b1714;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3)">×</span><img src="uploads/tennis-cara.jpg" alt="Cara tennis" style="display:block;width:100%;height:auto;border-radius:4px"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;color:rgba(0,0,0,.55);text-align:center;margin-top:8px">Sedona · red rocks</span><span style="position:absolute;top:100%;left:50%;transform:translateX(-50%);border:7px solid transparent;border-top-color:#fff"></span></span></sc-if></span> — chasing the same thing I chase everywhere: the right moment to hit.</p>
-        </div>
-      </div>
-
-      <!-- footnotes band -->
-      <div style="border-top:1px solid rgba(0,0,0,.4);padding-top:26px;position:relative">
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);column-gap:48px;row-gap:24px;align-items:start;max-width:1180px" class="sc-foot">
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:#3a342d"><b style="color:#1b1714">1.</b>&nbsp; <span style="color:#1b1714">UCSB.</span> arrived in California at 18.</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:#3a342d"><b style="color:#1b1714">2.</b>&nbsp; <span style="color:#1b1714">New York.</span> Σ deals &gt; $8B</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:#3a342d"><b style="color:#1b1714">3.</b>&nbsp; <span style="color:#1b1714">Beijing.</span> signal = ∫ noise · dt</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:#3a342d"><b style="color:#1b1714">4.</b>&nbsp; Among the early reporters on the ground as COVID broke.</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:#3a342d"><b style="color:#1b1714">5.</b>&nbsp; <span style="color:#1b1714">UChicago → the desk.</span> NPV = Σ CF<sub>t</sub> / (1 + r)<sup>t</sup>, r = consensus</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:#3a342d"><b style="color:#1b1714">6.</b>&nbsp; dRisk / d(consensus) &gt; 0</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:#3a342d"><b style="color:#1b1714">7.</b>&nbsp; <span style="color:#1b1714">RedNote.</span> audience = ∫ (unsayable) · dt</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ---------- SECTION 2 : WRITING ---------- -->
-    <section ref="{{ writingRef }}" data-section="writing" data-screen-label="02 Writing" style="min-height:100vh;background:#FBF7F0 url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%27260%27%20height=%27260%27%3E%3Cfilter%20id=%27p%27%3E%3CfeTurbulence%20type=%27fractalNoise%27%20baseFrequency=%27.6%27%20numOctaves=%272%27%20stitchTiles=%27stitch%27/%3E%3CfeColorMatrix%20type=%27saturate%27%20values=%270%27/%3E%3C/filter%3E%3Crect%20width=%27260%27%20height=%27260%27%20filter=%27url%28%23p%29%27%20opacity=%27.04%27/%3E%3C/svg%3E);padding:62px 76px 64px;display:flex;flex-direction:column">
-      <div class="led-row sec-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-bottom:8px">
-        <div style="display:flex;align-items:baseline;gap:24px"><span style="font-family:'Newsreader',serif;font-weight:300;font-variant-numeric:lining-nums;font-size:88px;line-height:1;color:#d8ccb6;flex:none">02</span><h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:clamp(34px,4vw,56px);line-height:1.05;letter-spacing:-.015em;margin:0;max-width:900px">Ideas I wanted to think through, so I wrote them down:</h1></div>
-        
-      </div>
-      <!-- staggered horizontal gallery -->
-      <div style="flex:1;display:flex;align-items:flex-end;gap:34px;overflow-x:auto;overflow-y:hidden;padding:40px 4px 20px;margin:0 -4px">
-        <sc-for list="{{ writing }}" as="item" hint-placeholder-count="5">
-          <div onClick="{{ item.onClick }}" role="{{ item.role }}" tabindex="{{ item.tab }}" onKeyDown="{{ item.onKey }}" class="led-row" style="flex:none;width:264px;align-self:flex-start;margin-top:{{ item.offset }};cursor:{{ item.cursor }};transition:transform .25s cubic-bezier(.2,.7,.3,1)" style-hover="{{ item.hover }}">
-            <div style="font-size:21px;line-height:1.15;color:#1b1714">{{ item.title }}</div>
-            <div style="font-size:14px;line-height:1.35;color:rgba(0,0,0,.5);margin:5px 0 16px">{{ item.desc }}</div>
-            <img src="slot-img/{{ item.slot }}.webp" alt="{{ item.title }}" loading="lazy" style="display:block;width:100%;height:328px;object-fit:cover;border-radius:4px;background:{{ item.cover }};box-shadow:0 8px 24px rgba(0,0,0,.1)">
-          </div>
-        </sc-for>
-      </div>
-    </section>
-
-    <!-- ---------- SECTION 3 : DEALS ---------- -->
-    <section ref="{{ dealsRef }}" data-section="deals" data-screen-label="03 Deals" style="min-height:100vh;background:#a44a24;padding:62px 76px 64px;display:flex;flex-direction:column">
-      <div class="led-row sec-head" style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:30px">
-        <div style="display:flex;align-items:baseline;gap:24px"><span style="font-family:'Newsreader',serif;font-weight:300;font-variant-numeric:lining-nums;font-size:88px;line-height:1;color:rgba(255,255,255,.34);flex:none">03</span><h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:clamp(34px,4vw,56px);line-height:1.05;letter-spacing:-.015em;margin:0;max-width:900px;color:#fbeee6">Deals I wanted to get right, so I sweated every detail:</h1></div>
-        
-      </div>
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;color:rgba(251,238,230,.85);margin-bottom:22px" class="led-row">CLOSED TRANSACTIONS · &#931; &gt; $8B · CLICK A TILE FOR DETAIL</div>
-      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:24px;min-height:0">
-        <sc-for list="{{ dealCats }}" as="cat" hint-placeholder-count="3">
-          <div>
-            <div style="display:flex;align-items:baseline;gap:14px;margin:0 0 11px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:rgba(251,238,230,.84)">
-              <span>{{ cat.label }}</span>
-              <span style="flex:1;height:1px;background:rgba(251,238,230,.26)"></span>
-              <span style="color:rgba(251,238,230,.82)">{{ cat.count }}</span>
-            </div>
-            <sc-if value="{{ cat.hasItems }}" hint-placeholder-val="{{ true }}">
-              <div class="tomb-row">
-                <div class="tomb-track" style="--dur:{{ cat.dur }}">
-                  <sc-for list="{{ cat.items }}" as="item" hint-placeholder-count="8">
-                    <div class="tomb" role="button" tabindex="0" aria-label="{{ item.ariaLabel }}" onKeyDown="{{ item.onKey }}" onMouseEnter="{{ spineSound }}" onClick="{{ item.onClick }}">
-                      <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center">
-                        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:#a0431f">{{ item.top }}</div>
-                        <div style="font-family:'Newsreader',Georgia,serif;font-size:14px;color:#b23f1a;margin:7px 0 2px">&#10037;</div>
-                        <sc-if value="{{ item.hasValue }}" hint-placeholder-val="{{ true }}">
-                          <div style="font-family:'Newsreader',Georgia,serif;font-weight:500;font-size:clamp(24px,2vw,32px);line-height:1;letter-spacing:-.01em;color:#1b1714">{{ item.value }}</div>
-                        </sc-if>
-                        <div style="font-family:'Newsreader',Georgia,serif;font-size:15px;line-height:1.14;color:#3a2a20;margin-top:6px;text-wrap:balance">{{ item.title }}</div>
-                        <sc-if value="{{ item.hasRole }}" hint-placeholder-val="{{ true }}">
-                          <div style="width:26px;height:1px;background:rgba(160,52,24,.5);margin:10px 0 7px"></div>
-                          <div style="font-family:'IBM Plex Mono',monospace;font-size:7.5px;letter-spacing:.22em;text-transform:uppercase;color:#a0431f">{{ item.role }}</div>
-                        </sc-if>
-                      </div>
-                    </div>
-                  </sc-for>
-                </div>
-              </div>
-            </sc-if>
-            <sc-if value="{{ cat.empty }}" hint-placeholder-val="{{ false }}">
-              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:rgba(251,238,230,.5);padding:20px 0">Entries forthcoming.</div>
-            </sc-if>
-          </div>
-        </sc-for>
-      </div>
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;line-height:1.6;color:rgba(251,238,230,.8);margin-top:26px;max-width:820px">Selected transactions, representative of a broader deal history. Project names are pseudonyms and certain details are omitted or anonymized where confidential.</div>
-    </section>
-
-    <!-- ---------- SECTION 4 : AI PROJECTS ---------- -->
-    <section ref="{{ aiRef }}" data-section="ai" data-screen-label="04 AI Projects" style="min-height:100vh;background:#FBF7F0 url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%27260%27%20height=%27260%27%3E%3Cfilter%20id=%27p%27%3E%3CfeTurbulence%20type=%27fractalNoise%27%20baseFrequency=%27.6%27%20numOctaves=%272%27%20stitchTiles=%27stitch%27/%3E%3CfeColorMatrix%20type=%27saturate%27%20values=%270%27/%3E%3C/filter%3E%3Crect%20width=%27260%27%20height=%27260%27%20filter=%27url%28%23p%29%27%20opacity=%27.04%27/%3E%3C/svg%3E);padding:62px 76px 64px;display:flex;flex-direction:column">
-      <div class="led-row sec-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-bottom:8px">
-        <div style="display:flex;align-items:flex-start;gap:24px"><span style="font-family:'Newsreader',serif;font-weight:300;font-variant-numeric:lining-nums;font-size:80px;line-height:.92;color:#d8ccb6;flex:none">04</span><h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:clamp(34px,4vw,56px);line-height:1.05;letter-spacing:-.015em;margin:0;max-width:900px">Tools that I wanted in my personal life, so I built:</h1></div>
-        
-      </div>
-      <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:clamp(40px,6vw,96px);flex-wrap:wrap;padding:30px 0">
-        <sc-for list="{{ ai }}" as="item" hint-placeholder-count="3">
-          <div onClick="{{ item.onClick }}" role="{{ item.role }}" tabindex="{{ item.tab }}" onKeyDown="{{ item.onKey }}" class="led-row" style="position:relative;flex:none;width:236px;height:372px;cursor:{{ item.cursor }};transition:transform .3s cubic-bezier(.2,.7,.3,1)" style-hover="{{ item.hover }}">
-            <img src="slot-img/{{ item.slot }}.webp" alt="{{ item.title }}" loading="lazy" style="display:block;width:100%;height:100%;object-fit:cover;border-radius:6px;background:{{ item.cover }};box-shadow:0 10px 30px rgba(0,0,0,.13)">
-            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 14px">
-              <span style="font-family:'IBM Plex Mono',monospace;font-size:16px;letter-spacing:.08em;color:{{ item.labelColor }};text-shadow:0 1px 10px rgba(0,0,0,.25)">{{ item.label }}</span>
-              <sc-if value="{{ item.soon }}" hint-placeholder-val="{{ false }}">
-                <span style="font-family:'Newsreader',Georgia,serif;font-style:italic;font-size:15px;color:rgba(255,255,255,.85);margin-top:8px">coming soon</span>
-              </sc-if>
-            </div>
-          </div>
-        </sc-for>
-      </div>
-    </section>
-
-    <!-- ---------- SECTION 5 : OFF THE RECORD (social + outtakes) ---------- -->
-    <section ref="{{ objectsRef }}" data-section="objects" data-screen-label="05 Off the Record" style="min-height:100vh;background:#FBF7F0;padding:62px 76px 76px;position:relative;overflow:hidden">
-      <div class="led-row sec-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-bottom:10px">
-        <div style="display:flex;align-items:baseline;gap:24px"><span style="font-family:'Newsreader',serif;font-weight:300;font-variant-numeric:lining-nums;font-size:88px;line-height:1;color:rgba(27,23,20,.2);flex:none">05</span><h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:clamp(34px,4vw,56px);line-height:1.05;font-weight:400;letter-spacing:-.015em;color:#1b1714;margin:0;max-width:900px">A life I wanted outside the desk, so I built one:</h1></div>
-        
-      </div>
-
-      <!-- STAND-UP + PODCASTS -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:44px;max-width:1180px;margin-bottom:58px;align-items:start" class="sc-standup">
-        <!-- one stand-up clip -->
-        <div>
-          <div class="led-row" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;color:rgba(0,0,0,.6);border-bottom:1px solid rgba(0,0,0,.4);padding-bottom:8px;margin-bottom:22px">STAND-UP · A CLIP</div>
-          <div class="led-row" style="display:flex;flex-direction:column;cursor:pointer;transition:transform .2s ease" style-hover="transform:translateY(-5px)">
-            <div style="position:relative;width:100%;aspect-ratio:16/10">
-              <img src="slot-img/standup-1.webp" alt="My First Open Mic — stand-up clip" loading="lazy" style="display:block;width:100%;height:100%;object-fit:cover;border-radius:10px;background:#1b1714">
-            </div>
-            <div style="font-size:22px;line-height:1.15;margin:14px 2px 0;color:#1b1714">My First Open Mic</div>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.6);margin:6px 2px 0;letter-spacing:.04em">Upper West, New York. Oct 2024</div>
-          </div>
-        </div>
-        <!-- podcasts -->
-        <div>
-          <div class="led-row" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;color:rgba(0,0,0,.6);border-bottom:1px solid rgba(0,0,0,.4);padding-bottom:8px;margin-bottom:22px">PODCASTS · CONVERSATIONS</div>
-          <sc-for list="{{ podcasts }}" as="item" hint-placeholder-count="2">
-            <div class="led-row" style="border-bottom:1px solid rgba(0,0,0,.18);padding-bottom:20px;margin-bottom:20px">
-              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;color:rgba(0,0,0,.6);margin-bottom:9px">{{ item.show }}</div>
-              <div style="font-size:19px;line-height:1.36;color:#1b1714;text-wrap:pretty">{{ item.desc }}</div>
-              <sc-if value="{{ item.hasUrl }}" hint-placeholder-val="{{ true }}">
-                <a href="{{ item.url }}" target="_blank" rel="noopener" style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;color:#1b1714;text-decoration:none;border-bottom:1px solid rgba(0,0,0,.5);margin-top:13px">{{ item.linkLabel }}</a>
-              </sc-if>
-              <sc-if value="{{ item.noUrl }}" hint-placeholder-val="{{ false }}">
-                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;color:rgba(0,0,0,.45);margin-top:13px">{{ item.note }}</div>
-              </sc-if>
-            </div>
-          </sc-for>
-        </div>
-      </div>
-
-      <!-- 小红书 -->
-      <div class="led-row" style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid rgba(0,0,0,.4);padding-bottom:8px;margin-bottom:22px">
-        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;color:rgba(0,0,0,.6)">RedNote · WHAT I POST — <span style="color:#1b1714">@carazhou</span></span>
-        <a href="https://xhslink.com/m/1Fe9oeb6wyu" target="_blank" rel="noopener" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;color:#1b1714;text-decoration:none;border-bottom:1px solid rgba(0,0,0,.5)">MORE ON REDNOTE →</a>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:22px;max-width:1180px;margin-bottom:58px" class="sc-social">
-        <sc-for list="{{ socialShort }}" as="item" hint-placeholder-count="4">
-          <div class="led-row" style="display:flex;flex-direction:column;cursor:pointer;transition:transform .2s ease" style-hover="transform:translateY(-5px)">
-            <img src="slot-img/{{ item.slot }}.webp" alt="{{ item.title }}" loading="lazy" style="display:block;width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:12px;background:#fbf7f0;box-shadow:0 6px 18px rgba(0,0,0,.15)">
-            <div style="font-size:16px;line-height:1.3;margin:13px 2px 0;color:#1b1714;text-wrap:pretty">{{ item.title }}</div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 2px 0">
-              <span style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.55)"><span style="width:18px;height:18px;border-radius:50%;background:#C2562B;flex:none"></span>cara zhou</span>
-              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#1b1714">♥ {{ item.likes }}</span>
-            </div>
-          </div>
-        </sc-for>
-      </div>
-
-      <!-- ELSEWHERE -->
-      <div class="led-row" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;color:rgba(0,0,0,.6);border-bottom:1px solid rgba(0,0,0,.4);padding-bottom:8px;margin:58px 0 22px">ELSEWHERE · CURRENTLY</div>
-      <div class="led-row" style="display:flex;flex-wrap:wrap;gap:12px;max-width:920px">
-        <sc-for list="{{ misc }}" as="item" hint-placeholder-count="6">
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1714;border:1px solid rgba(0,0,0,.35);border-radius:22px;padding:8px 16px;background:rgba(255,255,255,.18)">{{ item }}</div>
-        </sc-for>
-      </div>
-    </section>
-
-    <!-- ---------- CLOSING COLOPHON / CONTACT ---------- -->
-    <section data-section="contact" data-screen-label="06 Contact" ref="{{ contactSecRef }}" style="background:#FBF7F0;min-height:100vh;position:relative;overflow:hidden">
-      <div ref="{{ contactPanelRef }}" class="contactPanel" style="position:absolute;inset:0;background:#a44a24;color:#f4efe7;padding:clamp(72px,11vh,128px) 76px clamp(46px,6vh,72px);display:flex;flex-direction:column;justify-content:center;clip-path:inset(32% 24% round 20px);will-change:clip-path">
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:#fbeee6;margin-bottom:24px">Correspondence welcome</div>
-      <h2 style="font-family:'Newsreader',serif;font-weight:400;font-size:clamp(44px,7vw,96px);line-height:.98;letter-spacing:-.012em;margin:0">Let&rsquo;s talk.</h2>
-
-      <div style="display:flex;flex-wrap:wrap;gap:30px 72px;margin-top:clamp(38px,6vh,60px)">
-        <a href="https://www.linkedin.com/in/carazhou/" target="_blank" rel="noopener" style="display:flex;flex-direction:column;gap:9px;text-decoration:none;color:inherit">
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:rgba(244,239,231,.5)">LinkedIn</span>
-          <span style="font-family:'Newsreader',serif;font-size:clamp(22px,2.6vw,30px);color:#fbeee6;border-bottom:1px solid rgba(251,238,230,.4);padding-bottom:3px;transition:border-color .3s,color .3s" style-hover="border-color:#fbeee6;color:#fff">/in/carazhou &nbsp;&#8599;</span>
-        </a>
-        <a href="mailto:caraz.zhou@gmail.com" style="display:flex;flex-direction:column;gap:9px;text-decoration:none;color:inherit">
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:rgba(244,239,231,.5)">Email</span>
-          <span style="font-family:'Newsreader',serif;font-size:clamp(22px,2.6vw,30px);color:#fbeee6;border-bottom:1px solid rgba(251,238,230,.4);padding-bottom:3px;transition:border-color .3s,color .3s" style-hover="border-color:#fbeee6;color:#fff">caraz.zhou@gmail.com &nbsp;&#8599;</span>
-        </a>
-      </div>
-
-      <div class="contactSig" style="display:flex;align-items:center;gap:14px;margin-top:clamp(48px,8vh,84px);padding-top:22px;border-top:1px solid rgba(244,239,231,.14);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:rgba(244,239,231,.5)">
-        <span style="color:#f4efe7">Cara Zhou</span>
-        <span style="color:#f4d8c4">&#10037;</span>
-        <span>New York</span>
-        <span style="opacity:.5">&middot;</span>
-        <span>Est. 2026</span>
-      </div>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- ===================== ESSAY READER ===================== -->
-  <sc-if value="{{ readerOpen }}" hint-placeholder-val="{{ false }}">
-    <div id="readerRoot" style="position:fixed;inset:0;z-index:90;background:#fbf3df;overflow-y:auto">
-      <div onClick="{{ closeReader }}" role="button" tabindex="0" aria-label="Close reader" onKeyDown="{{ btnKey }}" style="position:fixed;top:22px;right:26px;width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.06);display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#15130e;z-index:3" style-hover="background:rgba(0,0,0,.12)">×</div>
-      <!-- ===== CHARTFORGE (PDF → Excel) ===== -->
-      <sc-if value="{{ rChartforge }}" hint-placeholder-val="{{ false }}">
-        <chartforge-app style="position:fixed;inset:0;z-index:1"></chartforge-app>
-      </sc-if>
-      <!-- ===== BLOOM (WebGL flower) ===== -->
-      <sc-if value="{{ rBloom }}" hint-placeholder-val="{{ false }}">
-        <div style="position:fixed;inset:0;background:#fff">
-          <bloom-canvas style="position:absolute;inset:0"></bloom-canvas>
-          <div style="position:absolute;top:clamp(20px,4vw,46px);left:clamp(20px,4vw,46px);max-width:330px;z-index:4;pointer-events:none">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#b9b0a2">Botanic Garden · 2026</div>
-            <h2 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:clamp(26px,3vw,34px);line-height:1.08;letter-spacing:-.015em;color:#1b1714;margin:13px 0 0">Reviving Georgia O’Keeffe’s flowers, in code.</h2>
-            <p style="font-size:15.5px;line-height:1.5;color:#6a6357;margin:14px 0 0;text-wrap:pretty">A living WebGL bloom — petals unfurling on a phyllotaxis spiral, drawn in her palettes. Click the flower to watch it open again; switch palettes and tune the bloom below.</p>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#9a9182;margin:16px 0 0">Bloom engine inspired by <a href="https://github.com/whitecat-captain/bloom-animation" target="_blank" rel="noopener" style="color:#a44a24;text-decoration:none;border-bottom:1px solid rgba(198,64,13,.45);pointer-events:auto">whitecat-captain / bloom-animation ↗</a></div>
-          </div>
-        </div>
-      </sc-if>
-
-      <!-- ===== LOCALFLOW (feature page in iframe) ===== -->
-      <sc-if value="{{ rLocalflow }}" hint-placeholder-val="{{ false }}">
-        <iframe src="uploads/localflow-feature.html" title="LocalFlow — build log" style="position:fixed;inset:0;width:100%;height:100%;border:none;background:#f4f1e8;z-index:1"></iframe>
-      </sc-if>
-
-      <!-- ===== INTERACTIVE PROJECT VIEW (single column) ===== -->
-      <sc-if value="{{ rDealAgent }}" hint-placeholder-val="{{ false }}">
-        <div style="max-width:1040px;margin:0 auto;padding:clamp(54px,8vh,100px) clamp(28px,5vw,64px) 110px">
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#a59c87">PROJECT &#183; {{ rDate }}</div>
-          <h1 style="font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:clamp(34px,4.4vw,52px);line-height:1.05;letter-spacing:-.02em;margin:18px 0 0;color:#1b1714">{{ rTitle }}</h1>
-          <p style="font-size:clamp(17px,1.7vw,20px);line-height:1.5;color:#5a5246;max-width:640px;margin:22px 0 0;text-wrap:pretty">{{ rDesc }}</p>
-          <a href="{{ rUrl }}" target="_blank" rel="noopener" style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.04em;color:#a44a24;text-decoration:none;border-bottom:1px solid #a44a24;padding-bottom:2px;margin-top:18px">{{ rLinkLabel }}</a>
-
-          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:clamp(36px,5vw,56px)">
-            <input ref="{{ dealRef }}" onKeyDown="{{ dealKey }}" placeholder="Cursor, Glean, Harvey, Ramp, Hebbia…" style="flex:1;min-width:260px;font-family:'IBM Plex Mono',monospace;font-size:16px;color:#1b1714;background:#fffdf7;border:1px solid rgba(0,0,0,.22);border-radius:8px;padding:17px 20px;outline:none" style-focus="border-color:#1b1714" />
-            <button onClick="{{ runDeal }}" style="font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:14px;letter-spacing:.04em;color:#fbf3df;background:#1b1714;border:none;border-radius:8px;padding:0 32px;height:58px;cursor:pointer" style-hover="background:#a44a24">research →</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:14px;margin-top:12px">
-            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#a59c87;white-space:nowrap">api key</span>
-            <input type="password" ref="{{ keyRef }}" onInput="{{ saveKey }}" placeholder="sk-ant-… (optional — stays in your browser, never sent anywhere else)" style="flex:1;min-width:220px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#5a5246;background:#f1ede0;border:1px solid rgba(0,0,0,.08);border-radius:8px;padding:13px 16px;outline:none" />
-          </div>
-
-          <sc-if value="{{ dealLoading }}" hint-placeholder-val="{{ false }}">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#8a5a32;margin-top:30px">Researching\u2026 drafting the memo.</div>
-          </sc-if>
-          <sc-if value="{{ dealError }}" hint-placeholder-val="{{ false }}">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#c0392b;margin-top:30px">{{ dealError }}</div>
-          </sc-if>
-
-          <sc-if value="{{ hasMemo }}" hint-placeholder-val="{{ false }}">
-            <div style="margin-top:36px;background:#fffdf7;border:1px solid rgba(0,0,0,.16);border-radius:10px;padding:28px 30px;max-width:820px">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap">
-                    <div>
-                      <div style="font-size:26px;line-height:1.1;color:#1b1714">{{ dmCompany }}</div>
-                      <div style="font-size:15px;color:rgba(0,0,0,.6);margin-top:4px;max-width:460px">{{ dmTagline }}</div>
-                    </div>
-                    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;color:#fff;background:{{ dmVerdictColor }};border-radius:20px;padding:6px 13px;white-space:nowrap">{{ dmVerdictLabel }}</div>
-                  </div>
-                  <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:14px">
-                    <sc-for list="{{ dmBadges }}" as="b" hint-placeholder-count="3">
-                      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.05em;color:#3a342d;border:1px solid rgba(0,0,0,.25);border-radius:20px;padding:4px 11px">{{ b }}</span>
-                    </sc-for>
-                  </div>
-                  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:20px">
-                    <sc-for list="{{ dmMetrics }}" as="m" hint-placeholder-count="4">
-                      <div style="border:1px solid rgba(0,0,0,.14);border-radius:6px;padding:11px 14px">
-                        <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(0,0,0,.45)">{{ m.label }}</div>
-                        <div style="font-size:18px;color:#1b1714;margin-top:3px">{{ m.value }}</div>
-                      </div>
-                    </sc-for>
-                  </div>
-                  <sc-for list="{{ dmSections }}" as="s" hint-placeholder-count="4">
-                    <div style="margin-top:18px">
-                      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a5a32;margin-bottom:5px">{{ s.label }}</div>
-                      <div style="font-size:16px;line-height:1.55;color:#2a241a">{{ s.body }}</div>
-                    </div>
-                  </sc-for>
-                  <div style="margin-top:18px">
-                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a5a32;margin-bottom:7px">Competitors</div>
-                    <div style="display:flex;flex-wrap:wrap;gap:7px">
-                      <sc-for list="{{ dmCompetitors }}" as="c" hint-placeholder-count="3">
-                        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(0,0,0,.6);background:#f1ede0;border-radius:20px;padding:4px 12px">{{ c }}</span>
-                      </sc-for>
-                    </div>
-                  </div>
-                  <div style="margin-top:18px">
-                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a5a32;margin-bottom:5px">IB valuation view</div>
-                    <div style="font-size:16px;line-height:1.55;color:#2a241a">{{ dmValuation }}</div>
-                  </div>
-                  <sc-if value="{{ dmHasChina }}" hint-placeholder-val="{{ false }}">
-                    <div style="margin-top:18px;background:#f6efe0;border:1px solid rgba(138,90,50,.3);border-radius:6px;padding:14px 16px">
-                      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a5a32;margin-bottom:5px">\u4e2d\u56fd China angle</div>
-                      <div style="font-size:16px;line-height:1.55;color:#2a241a">{{ dmChina }}</div>
-                    </div>
-                  </sc-if>
-                  <div style="margin-top:18px;border-top:1px solid rgba(0,0,0,.14);padding-top:16px">
-                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8a5a32;margin-bottom:6px">Verdict</div>
-                    <div style="font-size:16px;line-height:1.55;color:#2a241a">{{ dmVerdictReason }}</div>
-                  </div>
-            </div>
-          </sc-if>
-        </div>
-      </sc-if>
-
-      <!-- ===== ESSAY VIEW (two column) ===== -->
-      <sc-if value="{{ rEssay }}" hint-placeholder-val="{{ true }}">
-      <div class="sc-reader-grid" style="display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:clamp(30px,5vw,80px);max-width:1320px;margin:0 auto;padding:clamp(40px,6vh,86px) clamp(28px,5vw,72px) 100px">
-        <!-- title column -->
-        <div class="sc-reader-title" style="align-self:start;position:sticky;top:clamp(40px,6vh,86px)">
-          <h1 style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:400;font-size:clamp(38px,3.6vw,54px);line-height:1.04;letter-spacing:-.02em;margin:0;color:#1b1714">{{ rTitle }}</h1>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#9a8f78;margin-top:18px">{{ rDate }}</div>
-          <a href="{{ rUrl }}" target="_blank" rel="noopener" style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.04em;color:#a44a24;text-decoration:none;border-bottom:1px solid #a44a24;padding-bottom:2px;margin-top:24px">{{ rLinkLabel }}</a>
-        </div>
-        <!-- article column -->
-        <article style="max-width:760px">
-          <div style="width:100%;height:clamp(300px,42vh,560px);border-radius:2px;background:linear-gradient(160deg,#e8e0cc,#d8cfb6);box-shadow:0 2px 0 rgba(0,0,0,.06);margin-bottom:42px"></div>
-          <sc-for list="{{ rBody }}" as="para" hint-placeholder-count="6">
-            <p style="{{ para.style }}">{{ para.text }}</p>
-          </sc-for>
-        </article>
-      </div>
-      </sc-if>
-    </div>
-  </sc-if>
-
-  <!-- ===================== DEAL DETAIL CARD ===================== -->
-  <sc-if value="{{ dealCardOpen }}" hint-placeholder-val="{{ false }}">
-    <div id="dealCardOverlay" onClick="{{ closeDealCard }}" style="position:fixed;inset:0;z-index:95;background:rgba(22,10,5,.52);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:5vw;animation:mFade .25s ease">
-      <div id="dealCardPanel" onClick="{{ stopProp }}" style="position:relative;width:min(680px,94vw);background:#f4efe2;border-radius:3px;box-shadow:0 44px 96px rgba(28,8,3,.5);padding:46px 48px 40px;transform-origin:center;backface-visibility:hidden;animation:dealPop .34s cubic-bezier(.2,.8,.24,1) both">
-        <div style="position:absolute;inset:8px;border:1px solid rgba(160,52,24,.3);border-radius:2px;pointer-events:none"></div>
-        <div style="position:absolute;inset:11px;border:1px solid rgba(160,52,24,.13);border-radius:2px;pointer-events:none"></div>
-        <div onClick="{{ closeDealCard }}" role="button" tabindex="0" aria-label="Close" onKeyDown="{{ btnKey }}" style="position:absolute;top:16px;right:18px;width:30px;height:30px;border-radius:50%;background:#1b1714;color:#f4efe2;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:14px;z-index:2" style-hover="opacity:.8">&#215;</div>
-        <div class="dcBody" style="position:relative;z-index:1;display:flex;gap:clamp(24px,4vw,44px);align-items:stretch;text-align:left">
-          <div class="dcLeft" style="flex:0 0 auto;width:42%;min-width:0">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:#a0431f">{{ dcTop }}</div>
-            <sc-if value="{{ dcHasValue }}" hint-placeholder-val="{{ true }}">
-            <div style="font-family:'Newsreader',Georgia,serif;font-weight:500;font-size:52px;line-height:1;letter-spacing:-.015em;color:#1b1714;margin-top:14px">{{ dcValue }}</div>
-            </sc-if>
-            <div style="font-family:'Newsreader',Georgia,serif;font-size:23px;line-height:1.12;color:#3a2a20;margin-top:12px">{{ dcTitle }}</div>
-            <sc-if value="{{ dcHasRole }}" hint-placeholder-val="{{ true }}">
-            <div style="width:34px;height:1px;background:rgba(160,52,24,.5);margin:18px 0"></div>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.2em;text-transform:uppercase;color:#a0431f">{{ dcRole }}</div>
-            </sc-if>
-          </div>
-          <div class="dcDiv" style="width:1px;background:rgba(160,52,24,.24);flex:none"></div>
-          <div style="flex:1;min-width:0">
-            <sc-if value="{{ dcHasParties }}" hint-placeholder-val="{{ false }}">
-              <div style="margin-bottom:15px">
-                <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#a0431f;margin-bottom:6px">{{ dcSellerLabel }}</div>
-                <div style="font-family:'Newsreader',Georgia,serif;font-size:16px;line-height:1.45;color:#2a241a;text-wrap:pretty">{{ dcSeller }}</div>
-              </div>
-              <sc-if value="{{ dcHasBuyer }}" hint-placeholder-val="{{ true }}">
-              <div style="margin-bottom:15px">
-                <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#a0431f;margin-bottom:6px">{{ dcBuyerLabel }}</div>
-                <div style="font-family:'Newsreader',Georgia,serif;font-size:16px;line-height:1.45;color:#2a241a;text-wrap:pretty">{{ dcBuyer }}</div>
-              </div>
-              </sc-if>
-              <sc-if value="{{ dcHasResult }}" hint-placeholder-val="{{ false }}">
-                <div style="margin-bottom:15px">
-                  <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#a0431f;margin-bottom:6px">{{ dcOutcomeLabel }}</div>
-                  <div style="font-family:'Newsreader',Georgia,serif;font-size:16px;line-height:1.45;color:#2a241a;text-wrap:pretty">{{ dcResult }}</div>
-                </div>
-              </sc-if>
-              <div style="height:1px;background:rgba(160,52,24,.2);margin-bottom:16px"></div>
-            </sc-if>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#a0431f;margin-bottom:12px">{{ dcWorkLabel }}</div>
-            <div style="font-family:'Newsreader',Georgia,serif;font-size:18px;line-height:1.55;color:#2a241a;text-wrap:pretty">{{ dcWork }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </sc-if>
-</div>
-</x-dc>
-<script type="text/x-dc" data-dc-script>
-class Component extends DCLogic {
-  constructor(props){
-    super(props);
-    this.aboutRef = React.createRef();
-    this.writingRef = React.createRef();
-    this.dealsRef = React.createRef();
-    this.aiRef = React.createRef();
-    this.readingRef = React.createRef();
-    this.objectsRef = React.createRef();
-    this.scrollRef = React.createRef();
-    this.progRef = React.createRef();
-    this.navRef = React.createRef();
-    this.contactSecRef = React.createRef();
-    this.contactPanelRef = React.createRef();
-    this.state = { active:'about', babyOpen:false, newsOpen:false, crashOpen:false, redOpen:false, surfOpen:false, snowOpen:false, tennisOpen:false, reader:null, dealLoading:false, dealMemo:null, dealError:'', dealCard:null, pv:{ visible:false, x:560, y:420, i:0 } };
-    this.dealRef = React.createRef();
-    this.keyRef = React.createRef();
-    this.dealVpRef = React.createRef();
-    this.dealTrackRef = React.createRef();
-    this._order = ['about','writing','deals','ai','objects','contact'];
-    this._ratios = {};
-  }
-
-  formatBody(arr){
-    if(!arr) return [];
-    return arr.map((raw)=>{
-      let text = raw, style;
-      if(raw.indexOf('\u00a7 ')===0){
-        text = raw.slice(2);
-        style = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", fontWeight:'400', fontSize:'15px', letterSpacing:'.08em', textTransform:'uppercase', color:'#8a5a32', margin:'42px 0 18px', paddingBottom:'8px', borderBottom:'1px solid rgba(0,0,0,.18)' };
-      } else if(raw.charAt(0)==='\u201c' && raw.charAt(raw.length-1)==='\u201d'){
-        style = { fontFamily:"'Newsreader',Georgia,serif", fontStyle:'italic', fontSize:'18px', lineHeight:'1.6', color:'#4a4234', margin:'0 0 26px', padding:'4px 0 4px 22px', borderLeft:'2px solid rgba(0,0,0,.3)', textWrap:'pretty' };
-      } else {
-        style = { fontFamily:"'Newsreader',Georgia,serif", fontSize:'19px', lineHeight:'1.7', color:'#2a241a', margin:'0 0 26px', textWrap:'pretty' };
-      }
-      return { text, style };
-    });
-  }
-
-  get writing(){
-    return [
-      { slot:'w-ai-advice', title:'AI Can Write the Deck. It Still Can\u2019t Own the Advice.', desc:'The real value of advisory work is not polished output, but accountable judgment under uncertainty.', date:'Jul 2026', offset:'18px', cover:'linear-gradient(180deg,#26303a,#5a5048 52%,#b5481f)', url:'https://carazhou.substack.com/p/ai-can-write-the-deck-it-still-cant', linkLabel:'Read on Substack \u2197', body:[
-        '\u201cTaste\u201d is becoming one of those words people use when they want to defend the human role in an AI world. I understand why. After using AI tools intensively, I have felt the gap between work that looks polished and work that feels right. But I\u2019m increasingly convinced that \u201ctaste\u201d is the wrong explanation. The reason AI cannot replace advisory work is not that humans possess some mysterious aesthetic instinct. It is that advisory work is not primarily an output-generation problem. It is a judgment problem under incomplete information, unstable preferences, and real consequences.',
-        '\u201cI am skeptical of \u2018taste\u2019 because it can become a prestige word masquerading as an explanation. It compresses an entire ecology\u2014audience, incentives, risk, accountability\u2014into something that sounds like aesthetic refinement. The problem is that today\u2019s AI tools do not reliably supply situational judgment under stakes: knowing what to say, how strongly to say it, and, most importantly, what someone must be willing to be held responsible for afterward.\u201d',
-        'This is the core distinction: AI can answer an explicit prompt, but it cannot reliably resolve the implicit situation behind the prompt. That situation is made of incentives, power dynamics, timing, risk tolerance, and the uncomfortable question of who will defend the recommendation when it is challenged.',
-        'Recently, I was on a tight timeline for a potential sell-side M&A. I needed to build a case study of a closed deal to help my client understand the prospects, so I tried Fable 5. Compliance disclaimer: everything was based on public information; no confidential information was disclosed. I asked it to pull together public information on the case and convert it into an investor-ready PowerPoint in an investment banking format. I also gave it a two-page outline of what to include and which angles might matter.',
-        'At first glance, I was amazed by the quality. The layout looked great. It was not in my usual formatting, but that was easy to adjust. The problem appeared only when I examined the content more closely. There was a clear gap between what the tool treated as \u201cgood\u201d and what an experienced investment banker would expect. I do not claim to be a great investment banker, but I at least understand the bar my seniors set. In the end, I spent more time adjusting the content than I might have spent writing it myself. Still, because the information was pulled together quickly, I met the deadline.',
-        'That experience made me ask: in the age of AI, what makes advisory work still valuable?',
-        'The answer cannot simply be the ability to produce deliverables. If the deliverable were the whole product, AI would already be close enough to be disruptive. But in advisory work, the deliverable is only one part of the product. It is the visible residue of a deeper judgment process: framing the real question, deciding what claims can be defended, calibrating the level of confidence, and anticipating what consequences the document may create once it enters the room.',
-        'This is why \u201ctaste\u201d is an insufficient word. In cognitive semantics, categories have \u201cbest examples,\u201d or prototypes. The prototype of \u201ctaste\u201d is usually aesthetic preference: good prose, clean slides, elegant arguments. But the missing layer in advisory work is not aesthetic preference. It is institutional and strategic decision-making with consequences. A better phrase is accountable judgment.',
-        'This is where AI still struggles. It can summarize a company, list investment highlights, and undoubtedly generate a polished \u201cequity story.\u201d But it does not reliably infer which version of the story is both attractive and defensible under the actual transaction constraints. In advisory work, the hard part is rarely finding positive points. Every company has something that can be packaged as a strength. The hard part is deciding which strengths can actually carry the argument once buyers, lawyers, boards, and diligence teams start asking questions.',
-        'That judgment is not just analytical; it is also social and contextual. The old hierarchy of professional services already hints at this distinction: junior work is often organized around analysis and production, while senior work is organized around framing, trust, and expectation management. A founder may believe the company should be valued like a high-growth software business. A buyer may see it as a services-heavy operation with customer concentration risk. A management team may want to highlight \u201cproprietary technology,\u201d while the market may care more about recurring revenue, retention, or data depth. The advisor\u2019s job is to translate between these worlds without simply flattering the client or blindly adopting the market\u2019s skepticism.',
-        'Through repeated exposure to high-stakes judgment, I have learned which phrases are too promotional, which are too weak, and which slides are intellectually correct but commercially useless.',
-        'This is where the AI problem becomes more interesting than \u201cit lacks taste.\u201d The issue is not lack of capability. In many ways, the models are extremely capable. At a simplified level, LLM-based tools are trained to generate coherent, useful, preference-aligned outputs, and product workflows often push them toward outputs that look polished and genre-appropriate. That makes them powerful for first drafts. But genre-appropriateness is not the same as task success in a live advisory context. A banking deck is not just a deck. It is an intervention in a transaction process. It has to persuade the audience without creating potential diligence risks.',
-        'This is not an anti-AI argument. I use these tools constantly. LLMs can synthesize information, surface useful structures, and accelerate work that would otherwise take hours. But their default strength is genre-conforming plausibility. They are very good at learning the form of expertise: the tone, the structure, the vocabulary, the rhythm of strategic reasoning. The form, however, is not the same as the function. The function of an advisory document depends on constraints that are often invisible in the document itself: the client\u2019s expectations, the buyer\u2019s skepticism, the internal politics, the legal risk, the timing of the conversation, and the advisor\u2019s own willingness to stand behind the claim.',
-        'At the task level, the true objective is under-specified. When I ask AI to \u201cmake an investor-ready deck,\u201d the model can infer what such a deck usually looks like. But it cannot fully infer what I actually need this deck to do. Do I need to make the company look premium, or make the valuation expectation more realistic? Do I need to excite buyers, or prepare the client for skepticism? Do I need to highlight the technology story, or quietly shift the narrative toward data, retention, and revenue quality? These are not formatting decisions. They are strategic choices that still require human ownership.',
-        'One observation from investment banking has stayed with me: clients do not pay advisors because they lack information. They pay because information does not make the decision for them.',
-        'The hardest part of advisory work is not analysis alone; it is decision architecture. In a transaction, the client is rarely choosing between good and bad. More often, they are choosing between different configurations of risk. A higher bid may come with lower certainty. A faster buyer may demand harsher terms. A strategic buyer may understand the asset better but bring more execution risk. A lower valuation may be disappointing, but waiting may destroy momentum. The advisor\u2019s role is to make these trade-offs explicit and help the client decide which risk is worth taking.',
-        'This is another reason AI cannot replace advisory work. AI is good at generating options and summarizing pros and cons. But professional advice begins when options must be ranked under uncertainty. The value is not in saying, \u201cOption A has these benefits and Option B has these risks.\u201d The value is in saying, \u201cGiven your objective, constraints, timing, and tolerance for regret, this is the trade-off you should accept.\u201d That sentence is not merely analytical. It is a commitment.',
-        'The strongest counterargument is that this gap may narrow. If an AI system had access to years of senior banker comments, buyer feedback, diligence outcomes, valuation gaps, and firm-specific style norms, it could learn far more than the surface form of expertise. I think this is partly true. Many components of advisory judgment will become more automatable.',
-        'But that does not eliminate the need for advisors. It clarifies what advisors are actually paid for. Advisory work is not only pattern recognition over past cases. It requires making trade-offs in live situations where information is incomplete, preferences are unstable, and consequences are asymmetric. Someone still has to decide which narrative to defend, which risk to accept, which client expectation to challenge, and whose interests the work ultimately serves. AI can support that process, but it cannot replace the human accountability layer that turns analysis into advice.',
-        'This is why AI-generated professional work often feels almost right. It answers the explicit prompt, but not always the implicit situation. And advisory work lives precisely in that gap: between what can be generated and what can be defended.'
-      ] },
-      { slot:'w-2', title:'Time is non-linear.', desc:'I started to feel it this year.', date:'Jun 2026', offset:'0px', cover:'linear-gradient(180deg,#3b5a72,#7a8a8c 55%,#c8b48f)', url:'https://carazhou.substack.com/p/time-is-non-linear', body:[
-        'I started to feel it this year. Not as a theory, but as something that happens in the body.',
-        'This afternoon, I lit a cigarette while waiting for the bus. Spotify shuffled to \u201cBibo No Aozora.\u201d The light had that late-day softness that makes everything look briefly forgivable. Edges loosening, shadows stretching just enough to blur what\u2019s fixed. I stood there longer than I needed to. For a moment, time didn\u2019t move forward. It widened.',
-        '\u2014 Edward Hopper, Rooms by the Sea',
-        'I wasn\u2019t 27 on a New York sidewalk. I was 12, lying on the tiled balcony in China, the heat pressing up through the floor into my back. I was 35, maybe 40, sitting in a quiet garden I don\u2019t recognize yet, sipping tea from a handmade cup. I was 70, eyes closed, smiling faintly at the sound of a distant song.',
-        'I drifted, sideways into memory, forward into possibility. The present became elastic. And I understood something: that not all moments live on a timeline. Some moments become portals.',
-        'Finally, the bus came. I checked the time. Only 10 minutes had passed.',
-        'I\u2019ve read, vaguely, that before a system is measured, it exists in more than one state at once, uncollapsed. I don\u2019t really understand the physics. But standing there, it felt like my life had loosened its grip on sequence. 12, 40, and 70 were all available, all equally near, as if they occupied the same coordinates and only needed something to fix them in place.',
-        'Looking down at the screen did that. The light was cold, definite. It pulled everything back into order.'
-      ] },
-      { slot:'w-4z', title:'The Depth of the Optimization Is the Depth of the Trap', desc:'The U.S. and China each built the perfect machine for the last era they won. How about the AI era?', date:'Jun 2026', offset:'56px', cover:'linear-gradient(180deg,#2b3a4a,#7a6f5e 55%,#b5481f)', url:'https://carazhou.substack.com/p/the-depth-of-the-optimization-is', body:[
-        'The better a system is optimized for one paradigm, the harder it traps you when the next one shows up.',
-        'I kept thinking about this when I traveled back to China a few weeks ago for my dad\u2019s surgery. After almost four years in New York, I\u2019d forgotten what a \u201cgood\u201d train (subway) feels like: how fast it moves, how I could sit there with full internet, and talk via the phone without interruptions. The easy read is that China\u2019s infrastructure is ahead, and New York is behind. But it isn\u2019t that simple, because New York City\u2019s trains were once the best in the world. China could build the newest system precisely because it wasn\u2019t dragging an old one behind it.',
-        '\u201cWhen Li Hongzhang, the most powerful statesman of the late Qing dynasty and the man chiefly responsible for trying to drag China into the industrial age, arrived in New York in late August 1896, what struck him most was the skyscrapers. Asked what he liked best in America, he said he admired everything but was most astonished by the tall buildings: he\u2019d never seen anything twenty stories or higher in China or in Europe. He added a characteristically practical caveat, that China couldn\u2019t build them because typhoons would knock them down, and that they\u2019d be unlivable without reliable elevators. The remarks ran in a New York Times interview on September 3, 1896.\u201d',
-        'History keeps doing this. Britain industrialized first and then got stuck. Its factories, railways, and financial systems fit the first industrial revolution so well they couldn\u2019t bend toward the next one. Germany and the U.S. started later, with nothing to protect, and pulled ahead in steel, chemicals, and electricity. Gerschenkron called it the \u201cadvantage of backwardness.\u201d Sometimes the fastest way to build the new thing is to have never built the old one too well.',
-        'The mechanism runs deeper than \u201cincumbents are slow.\u201d When you optimize infrastructure for paradigm A, you also end up with investments that are hard to change, workers whose skills only fit A, and habits and institutions shaped by A. Most importantly, many people who make their living from A will fight to keep it that way. Mancur Olson precisely captured this in his book The Rise and Decline of Nations. Successful economies eventually lose their flexibility. They fill up with interest groups that protect the old ways, making it hard to change. In the end, success turns into rigidity. The trap is what happens after you win.',
-        'Which brings me to AI, where this is about to get very expensive for somebody.',
-        '\u00a7 The competition moved down the stack',
-        'For about twenty years, the battlefield was digital. The U.S. built every incentive around it: venture capital that prices asset-light bets correctly, public markets that reward 80% margins, and an immigration system that funneled the world\u2019s best engineers into a few zip codes. It worked. American labs still build the best models.',
-        'But the bottleneck for AI is moving down the stack, from the digital layer into the physical layer. It\u2019s no longer a smarter architecture that decides who gets to scale. It is an electric current. Grid interconnection. High voltage transformers. Fabs. And the moment the constraint is physical, twenty years of U.S. software optimization stops being an advantage and becomes the cage.',
-        'Look at the numbers. Connecting a new data center to the U.S. grid takes four to ten years. Building the data center itself takes two to three. Roughly 2,300 gigawatts of generation and storage are stranded in interconnection queues, more than the country\u2019s entire installed capacity. And here\u2019s the tell that the trap is real: in a single year, the share of new data center capacity going off-grid instead of waiting for an interconnection jumped from near zero to around thirty percent.',
-        'None of those bottlenecks is technological. They are the same institutions that make America a wonderful place to start a software company: federalism, environmental review, distributed private utilities, property rights, and a rule of law that hands everyone a say. Every one of those is also a veto. The system is doing precisely what it was built to do: protect distributed private interests, deliberate slowly, and let people object. And that is the thing strangling the buildout. America didn\u2019t get worse at infrastructure by accident. It got so good at something else that it forgot how to pour concrete and string wire on a national scale.',
-        'China is the mirror image, and the EV story already told us why. The same muscle that lets it blanket the country with charging stations, a state-owned grid, no private incumbent to fight, and planning-to-operation measured in months, transfers straight onto AI\u2019s power problem. It\u2019s adding roughly six times the U.S.\u2019s generation capacity over the next five years, putting up 430 gigawatts of wind and solar in 2025 alone. It runs data-center electricity at under half American rates. When the binding constraint becomes \u201ccan you build enormous physical infrastructure fast, with no one able to stop you,\u201d China\u2019s entire system is the optimization, and America\u2019s entire system is the trap.',
-        '\u00a7 But the trap runs both ways',
-        'This is where the lazy version of the essay takes over: \u201cChina is winning the AI race.\u201d That\u2019s not what the law says. The law says each side is caged by its own optimization, which means China is caged too, sitting in the exact layer where the U.S. still holds the high ground.',
-        'Watch the chips. Export controls cut China off from Nvidia and CUDA, the most optimized hardware-software stack in computing, by the logic of lock-in that should have been a death sentence. Instead, it shoved China off the optimized path onto a worse one: Huawei\u2019s Ascend line, now scaling toward 1.6 million dies a year, with ByteDance alone committing $5.6 billion. Gerschenkron\u2019s advantage of backwardness again, except that it was manufactured by sanctions rather than history. Deprived of an optimized solution, you have no choice but to invent your own path that compounds itself independently.',
-        'But the cage is also real. China\u2019s cutting-edge manufacturing capabilities have stopped at 7nm, and it is relying on its foreign stocks of high-bandwidth memory chips. At the real cutting edge of transistors, China is the one looking up to the moat of an incumbent player, TSMC, ASML\u2019s lithography machines, and a legacy supply chain that cannot be circumvented in three years by any amount of government coordination.',
-        'The other cage is subtler, and it\u2019s where the advantage of backwardness closes its own loop. China won mobile through being backward. It did not have an established desktop web infrastructure to protect around 2010, and therefore leaped from the PC to super apps. Backwardness was the entire advantage. But this advantage had a second half that\u2019s never quoted: once you leap, you\u2019re the one who holds the installed base. China tuned its mobile internet infrastructure to be a closed ecosystem and consumer exploitation, and it is that muscle memory that it brings to AI. Closedness, exploitation, and immediate monetization are all traits that might be wrong for a domain in which the advantage accrues to the open, long-term player. China leveraged the logic upwards. And now it is trapped on the other side.',
-        'Be precise about where that bites, though, because it\u2019s easy to overclaim. It doesn\u2019t bite at the model layer. The walled-garden data moat turned out to be irrelevant to building frontier models, which is exactly why DeepSeek and Qwen came out as good as they are. It bites at the instinct for capturing the value. The cage is in the reflex, not the capability.',
-        'So the actual situation may not be a race with a clear leader. It\u2019s a stack, fought layer by layer, and each country is strongest exactly where the other is caged: frontier models and algorithms, the U.S. wins; leading-edge fabrication, the U.S. wins and this is China\u2019s cage; power and grid, China wins and this is the U.S.\u2019 cage; deployment instinct, still open, but China\u2019s natural extraction instinct is a self-imposed trap.',
-        'Everything comes down to one question: which layer is the binding constraint? Because that\u2019s the only layer whose trap actually matters. If the bottleneck is algorithmic cleverness, U.S. optimization pays off and keeps paying. If it\u2019s gigawatts, and a growing number of serious people think it is, then the most sophisticated model in the world simply doesn\u2019t run, and the country that can\u2019t build power loses to the country that can\u2019t build the perfect transistor.',
-        '\u00a7 What I\u2019d actually watch',
-        'First: Stop scoring the AI race on model benchmarks. That\u2019s the layer commoditizing fastest. Frontier labs leapfrog each other by fractions of a point every few months, and no model holds a clean lead across categories for long. The money is in the layer that binds, and for the next few years, that layer is power. The picks-and-shovels clich\u00e9 is right. It\u2019s just wrong about which shovels.',
-        'Second: The trap\u2019s not fate. It\u2019s a time tax that can be paid. Those U.S. data centers going off-grid? The market is going around its own institutional cage in real time. The variable I\u2019d actually look for with the U.S. is whether the country can pull veto points out of interconnection and permit before the constraint bites down. That\u2019s the dominating lever, not the only one. Still, it\u2019s a political-economy question, not a technology one, and Olson\u2019s whole point is that mature democracies are, by their nature, bad at exactly this, which is exactly why it is worth watching.',
-        'Every system that dominates an era spends its victory lap building its own cage for the next one. The U.S. won the software era so completely that it forgot how to quickly build things in the physical world. On the flip side, China got so good at manufacturing and infrastructure that it might never escape the closed, top-down control that made it successful. Neither trap is permanent, but you don\u2019t get to choose your own constraints. You inherit them from the very things you excel at.'
-      ] },
-      { slot:'w-3', title:'People always return to their original state.', desc:'On ego, ambition, and the self we drift back to once the noise quiets.', date:'2025', offset:'150px', cover:'linear-gradient(180deg,#4a5240,#8a8a72 55%,#cabf9c)', url:'https://carazhou.substack.com', body:[
-        'Philosophies across time such as Buddhism, Daoism, Stoicism, suggest that beneath layers of ego, ambition, and external influence, there\u2019s a more essential \u201cself\u201d or even emptiness that people inevitably return to.',
-        'At first, we chase money, titles, proximity to prestige. But time reveals otherwise. No matter how much we contort, we drift back to the gravity of our inner state.',
-        'Perhaps that is the real measure of a career, or of a life. Not how far it can pull us away from ourselves, but whether it leads us back to the person we have always been.',
-        'This is why some people, after climbing so high, step away to write, to garden, to raise children, or simply to breathe. From the outside it looks like regression. In truth it is a return. We do not really reinvent ourselves. We uncover what was waiting all along, once the noise quiets down.',
-        'In relationships, this truth feels even more visible. In the beginning, both partners soften their edges. They are more attentive, more patient, more adventurous than they would be alone. Love makes us pliable, as if we could keep reshaping ourselves for the other.',
-        'But with time we circle back. The small habits reappear. The hidden temperaments resurface. The rhythms we slip into when no one is watching return. You can only hold your breath for so long before you begin to breathe in your own way again.',
-        'The real question, whether in life, in work, or in love, is not whether we can change ourselves for a season. It is whether our original state is something we can live with, and whether those who walk beside us can live with it too.'
-      ] },
-      { slot:'w-5', title:'Coming soon', desc:'More essays in the works.', offset:'92px', cover:'linear-gradient(180deg,#1f2a22,#3c4a3a)' }
-    ];
-  }
-  get deals(){
-    return [
-      { n:'01', title:'Project Helios', desc:'Sell-side lead on a software carve-out \u2014 built the model, ran diligence, drafted the CIM.', value:'$4.0B', role:'Sell-side', year:'2023', bg:'#b4a25b', fg:'#22305e', sub:'rgba(34,48,94,.7)', edge:'#9c8b48' },
-      { n:'02', title:'Project Atlas', desc:'Cross-border acquisition \u2014 owned synergy analysis and the board-deck narrative.', value:'$820M', role:'Buy-side', year:'2022', bg:'#d9d1b6', fg:'#2c3a30', sub:'rgba(44,58,48,.68)', edge:'#c3ba9c' },
-      { n:'03', title:'Project Vega', desc:'Minority growth round \u2014 led QofE coordination and management prep.', value:'$140M', role:'Sell-side', year:'2022', bg:'#2b4257', fg:'#eef2f5', sub:'rgba(238,242,245,.72)', edge:'#1e2f3f' },
-      { n:'04', title:'Margin Map', desc:'A unit-economics model a portfolio company still uses for board reporting.', value:'\u2014', role:'Operating', year:'2023', bg:'#6f7278', fg:'#f3f1ea', sub:'rgba(243,241,234,.7)', edge:'#5a5d63' }
-    ];
-  }
-  get ai(){
-    return [
-      { slot:'ai-localflow', label:'LOCALFLOW', labelColor:'#fff', cover:'linear-gradient(150deg,#22303f,#38506a 48%,#C2562B)', ph:'cover', soon:false, live:true, interactive:'localflow', title:'LocalFlow', date:'2026', desc:'Voice dictation that never leaves your Mac \u2014 on-device Whisper for speech, a local LLM for cleanup, wired into macOS with low-level event taps.' },
-      { slot:'ai-2', label:'BOTANIC GARDEN', labelColor:'#c0341d', cover:'linear-gradient(150deg,#e7ddc9,#dca0a0 52%,#c0341d)', ph:'cover', soon:false, live:true, interactive:'bloom', title:'Botanic Garden', date:'2026', desc:'A quiet, gallery-like WebGL flower bloom — Georgia O’Keeffe in code. Click to bloom; tune the palette and motion.' },
-      { slot:'ai-3', label:'CHARTFORGE', labelColor:'#fff', cover:'linear-gradient(150deg,#C2562B,#1b1714)', ph:'cover', soon:false, live:true, interactive:'chartforge', title:'ChartForge', date:'2026', desc:'PDF charts to editable Excel. Upload a PDF, pick the chart pages, and download an .xlsx with native, editable Excel charts — all in the browser, no server.' }
-    ];
-  }
-  get social(){
-    return [
-      { slot:'xhs-1', title:'What I Talk About After 25', likes:'7.8K' },
-      { slot:'xhs-2', title:'Things More Important Than Beauty', likes:'4.5K' },
-      { slot:'xhs-3', title:'I Ran Into My Helpless Childhood Self on the New York Subway', likes:'3.1k' },
-      { slot:'xhs-4', title:'How to Ask Good Questions Like a Journalist', likes:'1.5K' },
-      { slot:'xhs-5', title:'3 Notion systems that run my whole week', likes:'5.6k' },
-      { slot:'xhs-6', title:'A reading list for breaking into AI', likes:'1.2k' },
-      { slot:'xhs-7', title:'Folk-art finds from CDMX 🪅', likes:'844' },
-      { slot:'xhs-8', title:'My SF coffee-shop work rotation ☕', likes:'1.5k' }
-    ];
-  }
-
-  get standup(){
-    return [
-      { slot:'standup-1', title:'My first open mic (a slow-motion disaster)', venue:'The Setup, SF', date:'Mar 2024' }
-    ];
-  }
-  get podcasts(){
-    return [
-      { show:'Caixin · Investigative Reporting, 2009–2019', desc:'An audio series revisiting Caixin’s fifteen most influential investigations of the decade — from “Piercing the Anbang Capital Magic” and “The Red and Black of Zhou Yongkang” to “Guo Wengui’s Hand” and the Wei Zexi case. Front-line reporters and editors narrate the reporting path, the details behind each story, and what it felt like on the ground. Unlisted in mainland China over information sensitivity — I could only find an archive on YouTube.', url:'https://www.youtube.com/playlist?list=PL14m7y5rXkWLQV1rltVxApDkt4_6hjry9' },
-      { show:'Caixin · Business Uncover', desc:'A daily news podcast I made at Caixin — a fast, 15-minute rundown of the day’s most important business and market stories, built for listeners who wanted the signal without the noise.', note:'Caixin subscribers only' }
-    ];
-  }
-  get misc(){
-    return ['🏄 Catching a wave','🏂 Conquering a mountain','🎾 Painting the lines','⛵ Planning for the deep ocean'];
-  }
-
-  get data(){
-    return [
-      { n:'01', title:'Trophy Bowl', desc:'For winners.', dim:'18\u00d712\u00d712 cm', year:'1954', mat:'Silver-plated brass' },
-      { n:'02', title:'Homemade Jersey', desc:'Hand-sewn buttons on vintage tee.', dim:'68\u00d752 cm', year:'2024', mat:'Cotton, m.o.p. buttons' },
-      { n:'03', title:"Nonchalant Georgia O'Keefe", desc:'Paper doll with articulated limbs.', dim:'32\u00d714 cm', year:'c.1940', mat:'Printed paper, brass' },
-      { n:'04', title:'Simple Stool', desc:"Useless stool that can't bear weight but is beloved nonetheless.", dim:'45\u00d730\u00d730 cm', year:'c.1920', mat:'Oak' },
-      { n:'05', title:'Red Experiment', desc:'Old rusty wire basket, spray-painted and contorted into shape.', dim:'38\u00d728\u00d728 cm', year:'2023', mat:'Steel wire, enamel' },
-      { n:'06', title:'Korean Pot', desc:'Simple, earthy, whole.', dim:'22\u00d720\u00d720 cm', year:'c.1970', mat:'Unglazed ceramic' },
-      { n:'07', title:'Small New England Home', desc:'Procured in Maine. Makes me feel like an American Girl doll.', dim:'15\u00d712\u00d710 cm', year:'c.1960', mat:'Painted wood, tin' },
-      { n:'08', title:'Offering', desc:'Long taper candle from the 60s; incense holder from Japan.', dim:'24\u00d78\u00d78 cm', year:'c.1965', mat:'Beeswax, stoneware' },
-      { n:'09', title:'Reluctant Godzilla', desc:'She is breaking the cycle. She would rather be doing yoga.', dim:'56\u00d742 cm', year:'c.1980', mat:'Crayon on kraft' },
-      { n:'10', title:'Vintage Japanese Monster', desc:'Procured after rifling through antique toy shops in Tokyo.', dim:'18\u00d712\u00d78 cm', year:'c.1975', mat:'Vinyl' },
-      { n:'11', title:'A Mallard Flies Over Ohio', desc:'A flapping mallard from CDMX that reminds me of home.', dim:'42\u00d738\u00d715 cm', year:'c.1950', mat:'Painted wood, wire' },
-      { n:'12', title:'Lucky Eight', desc:'Vintage 8 sign. Brings prosperity and joy to the home.', dim:'30\u00d720\u00d73 cm', year:'c.1955', mat:'Enameled steel' },
-      { n:'13', title:'Austin Reading', desc:'Stable Diffusion Impressionism. The first artifact AI made me.', dim:'12\u00d710 cm', year:'2022', mat:'Digital print' },
-      { n:'14', title:'Mother Mary', desc:'Hand-beaded talisman.', dim:'8\u00d75\u00d71 cm', year:'2018', mat:'Glass beads, linen' },
-      { n:'15', title:'Brutalist Egg Holder', desc:'From a studio in Korea. Senselessly perfect, disproportionately beautiful.', dim:'10\u00d714\u00d714 cm', year:'2019', mat:'Cast aluminum' },
-      { n:'16', title:'Cork Stool', desc:'Handmade in Portugal. Best enjoyed nihilistically at sunset.', dim:'42\u00d735\u00d735 cm', year:'1989', mat:'Cork' },
-      { n:'17', title:'A Dummbell?', desc:'Beautifully turned wooden dumbbell. I stare at it often.', dim:'28\u00d78\u00d78 cm', year:'c.1930', mat:'Turned walnut' },
-      { n:'18', title:'Fisherman Obscured', desc:'Painter unknown.', dim:'45\u00d738 cm', year:'c.1940', mat:'Oil on canvas' },
-      { n:'19', title:'Congratulations', desc:'A trophy.', dim:'22\u00d710\u00d710 cm', year:'1928', mat:'Sterling silver' },
-      { n:'20', title:'Foam Finger', desc:'Christmas Day 2021.', dim:'46\u00d718\u00d78 cm', year:'2021', mat:'Foam, screen print' }
-    ];
-  }
-
-  get refs2(){ return { about:this.aboutRef, writing:this.writingRef, deals:this.dealsRef, ai:this.aiRef, reading:this.objectsRef, objects:this.objectsRef, contact:this.contactSecRef }; }
-
-  setupDealShelf(){
-    var vp = this.dealVpRef.current, track = this.dealTrackRef.current;
-    if(!vp || !track || !track.children.length){ this._dsRaf = requestAnimationFrame(()=>this.setupDealShelf()); return; }
-    var cs = getComputedStyle(track);
-    var PAD = parseFloat(cs.paddingLeft) || 76;
-    var GAP = parseFloat(cs.columnGap || cs.gap) || 14;
-    var COL = 96, OPEN = 520;
-    var N = track.children.length, BASE = N/3;   // 12
-    for(var i=0;i<N;i++){ track.children[i].style.transition = 'none'; track.children[i].style.flex = 'none'; }
-    this._P = BASE + 0.001;
-    this._focusIdx = -1;
-    this._dsAudio = false;
-    var onEnter = ()=>{ this._dsAudio = true; };
-    var onLeave = ()=>{ this._dsAudio = false; };
-    vp.addEventListener('pointerenter', onEnter);
-    vp.addEventListener('pointerleave', onLeave);
-    this._dsTeardown = ()=>{ vp.removeEventListener('pointerenter', onEnter); vp.removeEventListener('pointerleave', onLeave); };
-    var wrapDist = (i,P)=>{ var d=i-P; while(d>N/2) d-=N; while(d<-N/2) d+=N; return d; };
-    var tick = ()=>{
-      var track = this.dealTrackRef.current, vp = this.dealVpRef.current;
-      if(track && vp){
-        this._P += 0.011;
-        if(this._P >= 2*BASE) this._P -= BASE;
-        var P = this._P, sp = track.children, n = sp.length, widths = [];
-        for(var i=0;i<n;i++){
-          var d = Math.abs(wrapDist(i,P));
-          var t = Math.min(1, Math.max(0, (d - 0.42)/0.6));
-          var f = 1 - t*t*(3-2*t);
-          var w = COL + (OPEN-COL)*f;
-          widths[i] = w;
-          sp[i].style.width = w + 'px';
-          sp[i].style.zIndex = String(10 + Math.round(f*100));
-          var closed = sp[i].firstElementChild, open = sp[i].lastElementChild;
-          if(closed) closed.style.opacity = String(Math.max(0, 1 - f*1.8));
-          if(open) open.style.opacity = String(f);
-        }
-        var fl = Math.floor(P) % n, frac = P - Math.floor(P);
-        var cum = 0; for(var k=0;k<fl;k++) cum += widths[k] + GAP;
-        var cFl = cum + widths[fl]/2;
-        var cNext = cum + widths[fl] + GAP + widths[(fl+1)%n]/2;
-        var centerX = cFl + (cNext-cFl)*frac;
-        track.style.transform = 'translateX(' + (vp.clientWidth/2 - PAD - centerX) + 'px)';
-        var fi = Math.round(P) % n;
-        if(fi !== this._focusIdx){ this._focusIdx = fi; if(this._dsAudio) this.spineSound(); }
-      }
-      this._dsRaf = requestAnimationFrame(tick);
-    };
-    this._dsRaf = requestAnimationFrame(tick);
-  }
-
-  _ensureAudio(){
-    if(window.__caraMuted) return null;
-    var Ctx = window.AudioContext || window.webkitAudioContext; if(!Ctx) return null;
-    if(!window.__caraAC) window.__caraAC = new Ctx();
-    var ctx = window.__caraAC; if(ctx.state==='suspended') ctx.resume();
-    return ctx;
-  }
-  spineSound(){
-    try{
-      if(this._lastSlide && (performance.now()-this._lastSlide)<55) return;
-      this._lastSlide = performance.now();
-      var kind = this.state.tombSfx || 'paper';
-      if(kind==='off') return;
-      var ctx = this._ensureAudio(); if(!ctx) return;
-      this._tombTone(ctx, ctx.currentTime, kind);
-    }catch(e){}
-  }
-  _previewSfx(kind){
-    try{ if(kind==='off') return; var ctx=this._ensureAudio(); if(!ctx) return; this._tombTone(ctx, ctx.currentTime, kind); }catch(e){}
-  }
-  _tombTone(ctx, now, kind){
-    var master = ctx.createGain(); master.connect(ctx.destination);
-    function noiseBurst(dur){ var b=ctx.createBuffer(1,Math.max(1,Math.floor(ctx.sampleRate*dur)),ctx.sampleRate); var dd=b.getChannelData(0); for(var i=0;i<dd.length;i++){ var t=i/dd.length; dd[i]=(Math.random()*2-1)*(1-t); } var s=ctx.createBufferSource(); s.buffer=b; return s; }
-    if(kind==='wood'){
-      master.gain.value=0.9;
-      var o=ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(430,now); o.frequency.exponentialRampToValueAtTime(205,now+0.06);
-      var g=ctx.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.exponentialRampToValueAtTime(0.22,now+0.006); g.gain.exponentialRampToValueAtTime(0.0001,now+0.11);
-      var lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2600;
-      o.connect(lp); lp.connect(g); g.connect(master); o.start(now); o.stop(now+0.12);
-      var n=noiseBurst(0.02); var ng=ctx.createGain(); ng.gain.setValueAtTime(0.14,now); ng.gain.exponentialRampToValueAtTime(0.0001,now+0.02); var bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1900; bp.Q.value=0.7; n.connect(bp); bp.connect(ng); ng.connect(master); n.start(now); n.stop(now+0.03);
-    } else if(kind==='marble'){
-      master.gain.value=0.85;
-      [[1650,0.16],[2680,0.09],[3900,0.05]].forEach(function(p){ var o=ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(p[0],now); o.frequency.exponentialRampToValueAtTime(p[0]*0.86,now+0.12); var g=ctx.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.exponentialRampToValueAtTime(p[1],now+0.004); g.gain.exponentialRampToValueAtTime(0.0001,now+0.13); o.connect(g); g.connect(master); o.start(now); o.stop(now+0.14); });
-      var n=noiseBurst(0.012); var ng=ctx.createGain(); ng.gain.setValueAtTime(0.06,now); ng.gain.exponentialRampToValueAtTime(0.0001,now+0.012); var hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=3000; n.connect(hp); hp.connect(ng); ng.connect(master); n.start(now); n.stop(now+0.02);
-    } else if(kind==='paper'){
-      master.gain.value=0.9;
-      var n=noiseBurst(0.06); var hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.setValueAtTime(1400,now); hp.frequency.exponentialRampToValueAtTime(3200,now+0.05);
-      var g=ctx.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.exponentialRampToValueAtTime(0.12,now+0.008); g.gain.exponentialRampToValueAtTime(0.0001,now+0.06);
-      n.connect(hp); hp.connect(g); g.connect(master); n.start(now); n.stop(now+0.07);
-    } else if(kind==='felt'){
-      master.gain.value=1.0;
-      var o=ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(150,now); o.frequency.exponentialRampToValueAtTime(92,now+0.09);
-      var g=ctx.createGain(); g.gain.setValueAtTime(0.0001,now); g.gain.exponentialRampToValueAtTime(0.3,now+0.006); g.gain.exponentialRampToValueAtTime(0.0001,now+0.14);
-      var lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=900;
-      o.connect(lp); lp.connect(g); g.connect(master); o.start(now); o.stop(now+0.15);
+  function bakeRamps() {
+    const { stemWidth, stemEnd, w0, w1, w2, w3, curlBias } = params;
+    const widthPts = [stemWidth, w0, w1, w2, w3, 0.002];
+    for (let i = 0; i < RAMP_RES; i++) {
+      const v = i / (RAMP_RES - 1);
+      rampData[i * 4] =
+        v < stemEnd
+          ? stemWidth
+          : Math.max(catmullRom(widthPts, (v - stemEnd) / (1 - stemEnd)), 0.002);
+      rampData[i * 4 + 1] = curlBias * Math.pow(Math.max(v, 1e-4), curlBias - 1);
     }
+    rampTex.needsUpdate = true;
+  }
+  bakeRamps();
+
+  const uniforms = {
+    uRamps: { value: rampTex },
+    uBloom: { value: 0 },
+    uTransition: { value: params.transition },
+    uCurlClosed: { value: params.curlClosed },
+    uCurlOpen: { value: params.curlOpen },
+    uPropagation: { value: params.propagation },
+    uLength: { value: params.petalLen },
+    uCup: { value: params.cup },
+    uSideCurl: { value: params.sideCurl },
+    uWaveAmp: { value: params.waveAmp },
+    uWaveFreq: { value: params.waveFreq },
+    uAsym: { value: params.asym },
+    uTime: { value: 0 },
+    uNoiseAmp: { value: params.noiseAmp },
+    uNoiseFreq: { value: params.noiseFreq },
+    uWindAmp: { value: params.windAmp },
+    uWindSpeed: { value: params.windSpeed },
+    uWindHeading: { value: (params.windHeading * Math.PI) / 180 },
+    uShellGap: { value: params.shellGap },
+    uWrapWidth: { value: params.wrapWidth },
+    uWrapCup: { value: params.wrapCup },
+    uFlat: { value: 1 },
+    // Per-petal colour ramp (cold rim -> hot core). Defaults reproduce the
+    // original hard-coded blue->orange gradient exactly, so existing pages are
+    // untouched; the dahlia showcase swaps in a scarlet ramp via setPalette().
+    uCol0: { value: new THREE.Vector3(0.05, 0.2, 0.65) },
+    uCol1: { value: new THREE.Vector3(0.15, 0.55, 0.95) },
+    uCol2: { value: new THREE.Vector3(0.85, 0.92, 1.0) },
+    uCol3: { value: new THREE.Vector3(1.0, 0.72, 0.0) },
+    uCol4: { value: new THREE.Vector3(1.0, 0.25, 0.0) },
+  };
+
+  // Push every shape/wind param into its matching uniform in one shot. Used by
+  // applyPreset() so a page can hand over a whole look at once.
+  function syncShapeUniforms() {
+    uniforms.uTransition.value = params.transition;
+    uniforms.uCurlClosed.value = params.curlClosed;
+    uniforms.uCurlOpen.value = params.curlOpen;
+    uniforms.uPropagation.value = params.propagation;
+    uniforms.uLength.value = params.petalLen;
+    uniforms.uCup.value = params.cup;
+    uniforms.uSideCurl.value = params.sideCurl;
+    uniforms.uWaveAmp.value = params.waveAmp;
+    uniforms.uWaveFreq.value = params.waveFreq;
+    uniforms.uAsym.value = params.asym;
+    uniforms.uNoiseAmp.value = params.noiseAmp;
+    uniforms.uNoiseFreq.value = params.noiseFreq;
+    uniforms.uWindAmp.value = params.windAmp;
+    uniforms.uWindSpeed.value = params.windSpeed;
+    uniforms.uWindHeading.value = (params.windHeading * Math.PI) / 180;
+    uniforms.uShellGap.value = params.shellGap;
+    uniforms.uWrapWidth.value = params.wrapWidth;
+    uniforms.uWrapCup.value = params.wrapCup;
+    uniforms.uFlat.value = params.flat ? 1 : 0;
   }
 
-  componentDidMount(){
-    const els = this._order.map(id=>this.refs2[id].current).filter(Boolean);
-    this._io = new IntersectionObserver((entries)=>{
-      entries.forEach(e=>{ this._ratios[e.target.getAttribute('data-section')] = e.intersectionRatio; });
-      let best='about', bv=-1;
-      this._order.forEach(k=>{ const r=this._ratios[k]||0; if(r>bv){ bv=r; best=k; } });
-      if(best!==this.state.active) this.setState({ active:best });
-    }, { root:this.getScroller(true), threshold:[0,.2,.4,.6,.8,1], rootMargin:'-30% 0px -30% 0px' });
-    els.forEach(el=>this._io.observe(el));
+  const vert = /* glsl */ `
+attribute float aU;
+attribute float aSeed;
+attribute float aTilt;
+uniform sampler2D uRamps;
+uniform float uBloom, uTransition, uCurlClosed, uCurlOpen, uPropagation;
+uniform float uLength, uCup, uSideCurl, uWaveAmp, uWaveFreq, uAsym;
+uniform float uTime, uNoiseAmp, uNoiseFreq, uWindAmp, uWindSpeed, uWindHeading;
+uniform float uShellGap, uWrapWidth, uWrapCup;
 
-    // develop-on-scroll for ledger rows
-    const rows = this.scrollRef.current ? this.scrollRef.current.querySelectorAll('.led-row') : [];
-    this._rio = new IntersectionObserver((entries)=>{
-      entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); this._rio.unobserve(e.target); } });
-    }, { root:this.getScroller(true), threshold:0.12, rootMargin:'0px 0px -8% 0px' });
-    rows.forEach((el,i)=>{ el.style.transitionDelay = ((i%6)*55)+'ms'; this._rio.observe(el); });
-    this.applyAccent();
-
-    // Escape closes whichever layer is open (deal card first, then reader)
-    this._escKey = (e)=>{ if(e.key!=='Escape') return; if(this.state.dealCard!=null){ this.closeDealCard(); } else if(this.state.reader!=null){ this.closeReader(); } };
-    window.addEventListener('keydown', this._escKey);
-
-    // scroll progress tick in the rail + handoff fade-in as the hero is left behind
-    this._reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this._pscroll = ()=>{
-      const de = document.scrollingElement || document.documentElement;
-      const max = de.scrollHeight - window.innerHeight;
-      const y = window.scrollY || de.scrollTop || 0;
-      const pct = max>0 ? (y/max) : 0;
-      if(this.progRef.current) this.progRef.current.style.height = (pct*100).toFixed(2)+'%';
-      const nav = this.navRef.current;
-      const rootEl = this.scrollRef.current ? this.scrollRef.current.closest('.sc-root') : null;
-      if(nav && rootEl){
-        const vh = window.innerHeight;
-        const top = rootEl.getBoundingClientRect().top + y; // absolute top of the archive
-        const f = Math.min(1, Math.max(0, (y - (top - vh*0.95)) / (vh*0.45)));
-        nav.style.opacity = f.toFixed(3);
-      }
-
-      // contact panel: scrub-expand from an inset card to full-bleed as it enters view
-      const panel = this.contactPanelRef.current, sec = this.contactSecRef.current;
-      if(panel && sec){
-        if(this._reduceMotion){ panel.style.clipPath='inset(0% 0% round 0px)'; }
-        else {
-          const vh = window.innerHeight;
-          const top = sec.getBoundingClientRect().top;
-          // p: 0 when section top is ~90% down the viewport, 1 when it reaches ~12%
-          let p = (vh*0.9 - top) / (vh*0.78);
-          p = p<0?0:(p>1?1:p);
-          const e = 1 - Math.pow(1-p, 3);           // easeOutCubic
-          const tb = (32*(1-e)).toFixed(2), lr = (24*(1-e)).toFixed(2), rad = (20*(1-e)).toFixed(1);
-          panel.style.clipPath = 'inset('+tb+'% '+lr+'% round '+rad+'px)';
-        }
-      }
-    };
-    window.addEventListener('scroll', this._pscroll, { passive:true });
-    window.addEventListener('resize', this._pscroll, { passive:true });
-    this._pscroll();
-  }
-  componentDidUpdate(){ this.applyAccent(); }
-  applyAccent(){
-    const a = this.props.accent || '#C2562B';
-    const root = this.scrollRef.current; if(!root) return;
-    root.querySelectorAll('.sec-tag').forEach(el=>{ el.style.color = a; });
-  }
-  componentWillUnmount(){ if(this._io) this._io.disconnect(); if(this._rio) this._rio.disconnect(); if(this._dsRaf) cancelAnimationFrame(this._dsRaf); if(this._dsTeardown) this._dsTeardown(); if(this._navVeil && this._navVeil.parentNode) this._navVeil.parentNode.removeChild(this._navVeil); if(this._pscroll){ window.removeEventListener('scroll', this._pscroll); window.removeEventListener('resize', this._pscroll); } if(this._escKey) window.removeEventListener('keydown', this._escKey); }
-
-  getScroller(forObserver){
-    const cands = [];
-    let node = this.scrollRef.current;
-    while(node){
-      const oy = getComputedStyle(node).overflowY;
-      if((oy==='auto'||oy==='scroll') && node.scrollHeight > node.clientHeight + 4) cands.push(node);
-      node = node.parentElement;
-    }
-    const de = document.scrollingElement || document.documentElement;
-    if(de && de.scrollHeight > de.clientHeight + 4) cands.push(de);
-    const chosen = cands[0] || de || document.documentElement;
-    if(forObserver) return (chosen===de||chosen===document.documentElement||chosen===document.body) ? null : chosen;
-    return chosen;
-  }
-  navTo(id){
-    const el = this.refs2[id] && this.refs2[id].current;
-    if(!el) return;
-    const top = el.getBoundingClientRect().top + window.scrollY;
-    // near jump (adjacent) — plain smooth scroll, no dissolve
-    if(Math.abs(top - (window.scrollY||0)) < window.innerHeight*0.9){
-      window.scrollTo({ top, behavior:'smooth' });
-      return;
-    }
-    // chapter cross-dissolve: veil in the target panel's own tone, jump, develop back out
-    const colors = { about:'#FBF7F0', writing:'#FBF7F0', deals:'#a44a24', ai:'#FBF7F0', objects:'#FBF7F0', contact:'#a44a24' };
-    let ov = this._navVeil;
-    if(!ov){
-      ov = document.createElement('div');
-      ov.style.cssText = 'position:fixed;inset:0;z-index:70;pointer-events:none;opacity:0;will-change:opacity';
-      document.body.appendChild(ov);
-      this._navVeil = ov;
-    }
-    ov.style.background = colors[id] || '#FBF7F0';
-    ov.style.transition = 'opacity .22s ease';
-    requestAnimationFrame(()=>{ ov.style.opacity = '1'; });
-    window.setTimeout(()=>{
-      window.scrollTo({ top, behavior:'auto' });
-      requestAnimationFrame(()=>{
-        ov.style.transition = 'opacity .38s ease';
-        ov.style.opacity = '0';
-      });
-    }, 240);
-  }
-  scrollNext(){
-    const i = this._order.indexOf(this.state.active);
-    this.navTo(this._order[Math.min(i+1, this._order.length-1)]);
-  }
-
-  toggleBaby(){ this.setState(s=>({ babyOpen:!s.babyOpen })); }
-  toggleNews(){ this.setState(s=>({ newsOpen:!s.newsOpen })); }
-  toggleCrash(){ this.setState(s=>({ crashOpen:!s.crashOpen })); }
-  toggleRed(){ this.setState(s=>({ redOpen:!s.redOpen })); }
-  toggleSurf(){ this.setState(s=>({ surfOpen:!s.surfOpen })); }
-  toggleSnow(){ this.setState(s=>({ snowOpen:!s.snowOpen })); }
-  toggleTennis(){ this.setState(s=>({ tennisOpen:!s.tennisOpen })); }
-  openRead(i){ if(this.writing[i] && this.writing[i].body){ this.setState({ reader:this.writing[i] }); } }
-  openProject(obj){ if(obj && (obj.body || obj.interactive)){ this.setState({ reader:obj }); } }
-
-  zoomOpen(e, obj){
-    if(!(obj && (obj.body || obj.interactive))) return;
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var card = (e.currentTarget && e.currentTarget.closest) ? e.currentTarget.closest('.led-row') : null;
-    if(reduce || !card){ this.openProject(obj); return; }
-    var r = card.getBoundingClientRect();
-    // container transform: the reader grows out of the clicked card's footprint via clip-path
-    this._readerOrigin = { t:r.top, l:r.left, r:Math.max(0,window.innerWidth-r.right), b:Math.max(0,window.innerHeight-r.bottom) };
-    this.setState({ reader:obj });
-    var o = this._readerOrigin, tries=0;
-    var run = ()=>{
-      var root = document.getElementById('readerRoot');
-      if(!root){ if(tries++<14) requestAnimationFrame(run); return; }
-      root.style.willChange = 'clip-path';
-      root.style.transition = 'none';
-      root.style.clipPath = 'inset('+o.t+'px '+o.r+'px '+o.b+'px '+o.l+'px round 10px)';
-      root.getBoundingClientRect();
-      requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
-        root.style.transition = 'clip-path .58s cubic-bezier(.55,.08,.24,1)';
-        root.style.clipPath = 'inset(0px 0px 0px 0px round 0px)';
-        window.setTimeout(()=>{ if(root) root.style.willChange='auto'; }, 640);
-      }); });
-    };
-    requestAnimationFrame(run);
-  }
-
-  async runDeal(){
-    const el = this.dealRef.current;
-    const q = el ? (el.value||'').trim() : '';
-    if(!q || this.state.dealLoading) return;
-    this.setState({ dealLoading:true, dealError:'', dealMemo:null });
-    const prompt = 'You are a senior IB analyst at a top bulge-bracket bank covering AI/tech companies. Produce a concise, analytical investment memo for the company below using the IB framework.\n\n'
-      + 'Respond ONLY with valid minified JSON, no markdown or preamble. Keep every string tight (1\u20132 sentences max). Schema:\n'
-      + '{"company":"","tagline":"","stage":"","sector":"","founded":"","hq":"","business_model":"","key_metrics":[{"label":"","value":""}],"funding_history":"","moat":"","risks":"","competitors":[""],"ib_valuation_view":"","china_angle":"","verdict":"strong|moderate|weak","verdict_reason":""}\n'
-      + 'key_metrics: exactly 4 (e.g. ARR/Revenue, Valuation, YoY Growth, Employees). Use reasonable estimates if exact figures are unknown. competitors: 3. china_angle: a Chinese competitive-threat or market-opportunity note, or "" if none.\n\n'
-      + 'Company: ' + q;
-    try{
-      const text = await window.claude.complete({ messages:[{ role:'user', content: prompt }] });
-      let clean = String(text).replace(/```json|```/g,'').trim();
-      const a = clean.indexOf('{'), b = clean.lastIndexOf('}');
-      if(a>=0 && b>a) clean = clean.slice(a, b+1);
-      const memo = JSON.parse(clean);
-      this.setState({ dealMemo:memo, dealLoading:false });
-    }catch(err){
-      this.setState({ dealError:'Could not generate a memo \u2014 try again, or try a more well-known company.', dealLoading:false });
-    }
-  }
-  dealKey(e){ if(e.key==='Enter'){ e.preventDefault(); this.runDeal(); } }
-  closeReader(){
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var root = document.getElementById('readerRoot');
-    var o = this._readerOrigin;
-    var done = ()=>{ this.setState({ reader:null, dealMemo:null, dealError:'', dealLoading:false }); };
-    if(reduce || !root || !o){ done(); return; }
-    root.style.willChange = 'clip-path';
-    root.style.transition = 'clip-path .4s cubic-bezier(.5,0,.72,.2)';
-    root.style.clipPath = 'inset('+o.t+'px '+o.r+'px '+o.b+'px '+o.l+'px round 10px)';
-    window.setTimeout(done, 380);
-  }
-  _flipFlier(tile, r){
-    var outer = document.createElement('div');
-    outer.style.cssText = 'position:fixed;z-index:96;margin:0;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;height:'+r.height+'px;pointer-events:none;perspective:1400px';
-    var inner = document.createElement('div');
-    inner.style.cssText = 'position:absolute;inset:0;transform-style:preserve-3d;transform-origin:center center;will-change:transform';
-    var faceStyle = (el, back)=>{
-      el.style.position='absolute'; el.style.left='0'; el.style.top='0';
-      el.style.width='100%'; el.style.height='100%'; el.style.margin='0';
-      el.style.backfaceVisibility='hidden'; el.style.webkitBackfaceVisibility='hidden';
-      el.style.boxShadow='0 34px 66px -22px rgba(28,8,2,.62)';
-      if(back) el.style.transform='rotateY(180deg)';
-    };
-    var f = tile.cloneNode(true); faceStyle(f, false);
-    var b = tile.cloneNode(true); faceStyle(b, true);
-    inner.appendChild(f); inner.appendChild(b);
-    outer.appendChild(inner);
-    document.body.appendChild(outer);
-    return { outer:outer, inner:inner };
-  }
-  openDealCard(d, e){
-    var tile = e && (e.currentTarget || (e.target && e.target.closest && e.target.closest('.tomb')));
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(reduce || !tile){ this.setState({ dealCard:d }); this._dealTile=null; return; }
-    this._dealTile = tile;
-    var r = tile.getBoundingClientRect();
-    var flier = this._flipFlier(tile, r);
-    var dx = (window.innerWidth/2) - (r.left + r.width/2);
-    var dy = (window.innerHeight/2) - (r.top + r.height/2);
-    var scale = Math.min(2.5, Math.min(window.innerWidth*0.6, 660) / r.width);
-    flier.inner.style.transition = 'none';
-    flier.inner.style.transform = 'translate(0px,0px) scale(1) rotateY(0deg)';
-    requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
-      flier.inner.style.transition = 'transform .62s cubic-bezier(.36,0,.28,1)';
-      flier.inner.style.transform = 'translate('+dx.toFixed(1)+'px,'+dy.toFixed(1)+'px) scale('+scale.toFixed(3)+') rotateY(-360deg)';
-    }); });
-    setTimeout(()=>{ this.setState({ dealCard:d }); }, 600);
-    setTimeout(()=>{ flier.outer.style.transition = 'opacity .2s ease'; flier.outer.style.opacity = '0'; }, 610);
-    setTimeout(()=>{ if(flier.outer.parentNode) flier.outer.parentNode.removeChild(flier.outer); }, 840);
-  }
-  closeDealCard(){
-    if(this._dealClosing) return;
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var panel = document.getElementById('dealCardPanel');
-    var overlay = document.getElementById('dealCardOverlay');
-    var tile = this._dealTile;
-    if(reduce || !panel || !tile){ this.setState({ dealCard:null }); this._dealTile=null; return; }
-    this._dealClosing = true;
-    var r = tile.getBoundingClientRect();
-    var dx = (window.innerWidth/2) - (r.left + r.width/2);
-    var dy = (window.innerHeight/2) - (r.top + r.height/2);
-    var scale = Math.min(2.5, Math.min(window.innerWidth*0.6, 660) / r.width);
-    // cross-fade the flat card out at center, then spin a tombstone a full 360 the OTHER way back to its shelf spot
-    panel.style.animation = 'none';
-    panel.style.transition = 'transform .24s ease, opacity .24s ease';
-    panel.style.transformOrigin = 'center center';
-    panel.style.transform = 'scale(.92)';
-    panel.style.opacity = '0';
-    if(overlay){ overlay.style.animation='none'; overlay.style.transition = 'opacity .26s ease'; overlay.style.opacity = '0'; }
-    var flier = this._flipFlier(tile, r);
-    flier.outer.style.opacity = '0';
-    flier.inner.style.transition = 'none';
-    flier.inner.style.transform = 'translate('+dx.toFixed(1)+'px,'+dy.toFixed(1)+'px) scale('+scale.toFixed(3)+') rotateY(0deg)';
-    requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
-      flier.outer.style.transition = 'opacity .18s ease';
-      flier.outer.style.opacity = '1';
-      flier.inner.style.transition = 'transform .62s cubic-bezier(.36,0,.28,1)';
-      flier.inner.style.transform = 'translate(0px,0px) scale(1) rotateY(360deg)';
-    }); });
-    setTimeout(()=>{ this.setState({ dealCard:null }); }, 250);
-    setTimeout(()=>{ if(flier.outer.parentNode) flier.outer.parentNode.removeChild(flier.outer); this._dealClosing=false; this._dealTile=null; }, 800);
-  }
-  onRowEnter(i){ this.setState(s=>({ pv:{ ...s.pv, visible:true, i } })); }
-  onListLeave(){ this.setState(s=>({ pv:{ ...s.pv, visible:false } })); }
-  onListMove(e){
-    const el = this.objectsRef.current; if(!el) return;
-    const r = el.getBoundingClientRect();
-    let x = e.clientX - r.left, y = e.clientY - r.top;
-    x = Math.min(Math.max(x, 124), r.width - 130);
-    y = Math.min(Math.max(y, 150), r.height - 150);
-    this.setState(s=>({ pv:{ ...s.pv, x, y } }));
-  }
-
-  renderVals(){
-    const items = [
-      { id:'about',   label:'About',       sup:'',     num:'01' },
-      { id:'writing', label:'Writing',     sup:'(5)',  num:'02' },
-      { id:'deals',   label:'Deals',       sup:'(4)',  num:'03' },
-      { id:'ai',      label:'AI Projects', sup:'(4)',  num:'04' },
-      { id:'objects', label:'Off the Record', sup:'',  num:'05' },
-      { id:'contact', label:'Contact', sup:'',  num:'06' }
-    ];
-    const navItems = items.map(it=>{
-      const on = this.state.active===it.id;
-      return {
-        ...it,
-        onClick:()=>this.navTo(it.id),
-        rowStyle:{ position:'relative', display:'block', cursor:'pointer', padding:'9px 4px 9px 18px', margin:'3px 0' },
-        dotStyle:{ position:'absolute', left:'2px', top:'15px', width:'5px', height:'5px', borderRadius:'50%', background:'#a44a24', opacity:on?1:0, transition:'opacity .25s' },
-        labelStyle:{ fontFamily:"'IBM Plex Mono',monospace", fontSize:'11.5px', letterSpacing:'.15em', textTransform:'uppercase', color:on?'#2c2820':'#4c463b', marginTop:'4px', transition:'color .25s' },
-        numStyle:{ fontSize:'10px' }
-      };
-    });
-
-    const objects = this.data;
-    const indexItems = objects.map((o,i)=>({ ...o, onEnter:()=>this.onRowEnter(i) }));
-
-    const rd = this.state.reader || null;
-    const dm = this.state.dealMemo;
-    const pv = this.state.pv;
-    const cur = objects[pv.i] || objects[0];
-    const pvStyle = {
-      position:'absolute', left:pv.x+'px', top:pv.y+'px', width:'230px',
-      transform:'translate(18px,-50%)', opacity:pv.visible?1:0,
-      transition:'opacity .18s ease', pointerEvents:'none', zIndex:20
-    };
-
-    return {
-      navItems,
-      aboutRef:this.aboutRef, writingRef:this.writingRef, dealsRef:this.dealsRef, aiRef:this.aiRef, readingRef:this.readingRef, objectsRef:this.objectsRef, scrollRef:this.scrollRef, progRef:this.progRef, navRef:this.navRef, contactSecRef:this.contactSecRef, contactPanelRef:this.contactPanelRef,
-      scrollNext:()=>this.scrollNext(),
-      toggleBaby:()=>this.toggleBaby(),
-      babyOpen: this.state.babyOpen,
-      toggleNews:()=>this.toggleNews(),
-      newsOpen: this.state.newsOpen,
-      toggleCrash:()=>this.toggleCrash(),
-      crashOpen: this.state.crashOpen,
-      toggleRed:()=>this.toggleRed(),
-      redOpen: this.state.redOpen,
-      toggleSurf:()=>this.toggleSurf(),
-      surfOpen: this.state.surfOpen,
-      toggleSnow:()=>this.toggleSnow(),
-      snowOpen: this.state.snowOpen,
-      toggleTennis:()=>this.toggleTennis(),
-      tennisOpen: this.state.tennisOpen,
-      writing:this.writing.map((w,i)=>({ ...w, cursor: w.body?'pointer':'default', hover: w.body?'transform:translateY(-8px)':'', role: w.body?'button':null, tab: w.body?0:null, onKey: w.body?((e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); this.zoomOpen(e, w); } }):null, onClick: w.body?((e)=>this.zoomOpen(e, w)):(()=>{}) })),
-      deals:this.deals, spineSound:()=>this.spineSound(),
-      dealCats:(()=>{
-        // ---- deals by type (real content) ----
-        var ma=[
-          { title:'Project Roulette', value:'$3.4B', date:'May 2026', role:'Sell Side Advisor', seller:'Privately held industrial real estate operator with a 200-property national portfolio.', buyer:'Publicly traded mortgage REIT originating short-term, asset-backed mortgages.', result:'Reverse merger — the seller emerges as a publicly traded industrial REIT.', work:'Strategic investment deck — consideration analysis and stock-price analysis.' },
-          { title:'Project Regal', value:'$51M', date:'Oct 2025', role:'Sell Side Advisor', seller:'A fully integrated direct-to-consumer mortgage origination platform serving homeowners nationwide.', buyer:'A holding company whose businesses include asset management, mortgages, and real estate transactions.', result:'The buyer added a direct-to-consumer (DTC) lending channel and $3B in servicing balances to its platform.', work:'Point person from launch to close — oversaw diligence, ran the full bidding process end to end, authored the investor presentation, and led the valuation analysis.' },
-          { title:'Project Americas', value:'Undisc.', date:'Feb 2024', role:'Sell Side Advisor', seller:'A REIT that acquires, invests in, and manages re-performing and non-performing loans secured by single-family residences and commercial properties.', buyer:'A global asset manager focused on real estate, credit, and financial services.', result:'The seller serves as the buyer\u2019s external manager.', work:'Delivered the fairness opinion — built the dividend discount model (DDM) and the EPS accretion/dilution analysis.' },
-          { title:'Project Diamond', value:'Undisc.', date:'Dec 2023', role:'Sell Side Advisor', seller:'An advisory and housing solutions firm.', buyer:'A leader in serviced-accommodation program management.', result:'The buyer drives additional revenue by expanding its client base and forming new strategic relationships with multifamily property managers and owners in New York, the Southeast, and additional regions across the US.', work:'End-to-end point of contact — ran the bidding process, authored the investor presentation, and led the valuation analysis.' }
-        ];
-        var debt=[
-          { title:'Project Liberty', pm:true, status:'Did not close', pa:'What it was', outcomeLabel:'Why it fell through', workLabel:'What I learned', seller:'A major global financial services and specialty insurance holding company sought to sell its mortgage conduit.', buyer:'', result:'The company concluded that winding the operation down was preferable to selling it.', work:'A platform only sells when a buyer wants the whole of it. Here no one did: the large players had already built their own technology and wanted only the assets, while the smaller ones wanted the assets but not the team — so no bid valued the platform as a going concern, and every offer came in short. Sometimes an orderly wind-down beats selling into a market that will only pay for the parts.' },
-          { title:'Project Baseline', pm:true, status:'Did not close', pa:'What it was', outcomeLabel:'Why it fell through', workLabel:'What I learned', seller:'A mortgage whole-loan direct purchase-and-sale platform seeking a growth-equity investment.', buyer:'', result:'Too early. Investors couldn\u2019t see a clear exit, and the space had suddenly crowded — three to four look-alike raises in quick succession made the timing poor. They rated the technology highly and intended to go full speed as a customer, just not as an investor.', work:'Loving the product is not the same as funding it. The investors valued the technology enough to want to use it, but \u201cwe\u2019d be a customer\u201d is enthusiasm, not conviction. Without a legible exit, and against a wave of near-identical raises, being early to the right idea reads as risk rather than edge — timing and a credible path to exit can outweigh product quality in a capital decision.' },
-          { title:'Project Americana', pm:true, status:'Terminated', pa:'What it was', outcomeLabel:'Why it fell through', workLabel:'What I learned', seller:'The seller had signed an agreement to be acquired by the buyer.', buyer:'', result:'Mutually terminated — after assessing progress, both sides agreed to scrap the deal amid a shift in the buyer\u2019s strategic priorities.', work:'A signed agreement is not a closed deal. Even with the seller committed, a transaction lives or dies on the buyer\u2019s continued conviction, and strategic priorities can move between signing and closing. Momentum — not just terms — has to be protected all the way to the finish; once a buyer\u2019s strategy shifts, no amount of deal progress can hold it together.' },
-          { title:'Project Knock-Wood', pm:true, status:'Fingers crossed', pa:'The wish', workLabel:'Note to self', seller:'No more cards in this row. 🤞', buyer:'', result:'', work:'Return the calls, read the room, and never fall for a deal before it wires. Here\u2019s to the next one closing.' }
-        ];
-        var equity=[
-          { title:'Project Ruby', value:'Undisc.', date:'March 2026', role:'Financial Advisor', pa:'Company', pb:'Investor', seller:'A real estate asset-management platform focused on manufactured-housing communities.', buyer:'Global alternative asset manager.', result:'The platform scales its operations and funds asset & portfolio acquisitions with the new capital.', work:'Valuation analysis.' },
-          { title:'Project Sunlight', value:'Undisc.', date:'March 2025', role:'Financial Advisor', pa:'Company', pb:'Investor', seller:'A vertically integrated commercial real estate asset-management and investment platform.', buyer:'Global alternative asset manager.', result:'', work:'Led the valuation analysis and oversaw due diligence.' },
-          { title:'Project Skylight', value:'$100M', date:'Aug 2024', role:'Financial Advisor', pa:'Company', pb:'Investor', seller:'A technology-driven operator of regulated financial markets across multiple asset classes.', buyer:'A leading global growth investor.', result:'Funds the next phase of the company’s global expansion.', work:'Oversaw the full investment process and diligence; owned the investment analysis — including the warrant analysis.' },
-          { title:'Project Empire', value:'$100M', date:'June 2024', role:'Lead Left Bookrunner', pa:'Company', seller:'A pioneering alternative asset manager specializing in longevity and actuarial technology.', buyer:'', result:'Net proceeds fund operations — including the purchase of life-settlement policies — alongside working capital, general corporate purposes, and the repayment or refinancing of existing debt.', work:'Ran the valuation and dilution analysis, and worked closely with the ECM team to drive the deal to close.' }
-        ];
-        var mk=(a)=> a.map((d)=>Object.assign({}, d, { onClick:(e)=>this.openDealCard(d, e), onKey:(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); this.openDealCard(d, e); } }, ariaLabel:(d.title||'Deal')+(d.value?', '+d.value:'')+', view details', top: d.pm ? (d.status || 'Did not close') : (d.date || ''), hasRole: !!d.role, hasValue: !!d.value }));
-        var reel=(a)=> mk(a);
-        function pad(n){ return n<10 ? '0'+n : ''+n; }
-        var cats=[
-          { label:'Mergers & Acquisitions', dur:'44s', src:ma },
-          { label:'Growth Equity & IPO', dur:'48s', src:equity },
-          { label:'Post-Mortem', dur:'52s', src:debt }
-        ];
-        return cats.map((c)=>({ label:c.label, dur:c.dur, count:pad(c.src.length), items:reel(c.src), hasItems:c.src.length>0, empty:c.src.length===0 }));
-      })(),
-      ai:this.ai.map((p)=>Object.assign({}, p, { cursor: p.live?'pointer':'default', hover: p.live?'transform:translateY(-10px)':'', role: p.live?'button':null, tab: p.live?0:null, onKey: (p.live&&(p.body||p.interactive))?((e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); this.zoomOpen(e,p); } }):null, onClick: (p.live&&(p.body||p.interactive))?((e)=>this.zoomOpen(e,p)):(()=>{}) })), social:this.social,
-      standup:this.standup, podcasts:this.podcasts.map(p=>({ ...p, hasUrl:!!p.url, noUrl:!p.url, linkLabel:p.linkLabel||'LISTEN ↗' })), misc:this.misc, socialShort:this.social.slice(0,4),
-      readerOpen: this.state.reader!=null,
-      closeReader:()=>this.closeReader(),
-      stopProp:(e)=>{ e.stopPropagation(); },
-      btnKey:(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.currentTarget.click(); } },
-      dealCardOpen: this.state.dealCard!=null,
-      closeDealCard:()=>this.closeDealCard(),
-      dcDate: this.state.dealCard?this.state.dealCard.date:'', dcTop: this.state.dealCard?(this.state.dealCard.pm?(this.state.dealCard.status||'Did not close'):(this.state.dealCard.date||'')):'', dcHasValue: !!(this.state.dealCard && this.state.dealCard.value), dcHasRole: !!(this.state.dealCard && this.state.dealCard.role), dcRole: this.state.dealCard?this.state.dealCard.role:'', dcValue: this.state.dealCard?this.state.dealCard.value:'', dcTitle: this.state.dealCard?this.state.dealCard.title:'', dcSeller: this.state.dealCard?(this.state.dealCard.seller||''):'', dcBuyer: this.state.dealCard?(this.state.dealCard.buyer||''):'', dcHasParties: !!(this.state.dealCard && (this.state.dealCard.seller || this.state.dealCard.buyer)), dcSellerLabel: this.state.dealCard?(this.state.dealCard.pa||'Seller'):'', dcBuyerLabel: this.state.dealCard?(this.state.dealCard.pb||'Buyer'):'', dcOutcomeLabel: this.state.dealCard?(this.state.dealCard.outcomeLabel||'Outcome'):'', dcWorkLabel: this.state.dealCard?(this.state.dealCard.workLabel||'My Responsibilities'):'', dcHasBuyer: !!(this.state.dealCard && this.state.dealCard.buyer), dcResult: this.state.dealCard?(this.state.dealCard.result||''):'', dcHasResult: !!(this.state.dealCard && this.state.dealCard.result), dcWork: this.state.dealCard?(this.state.dealCard.work||'Details available on request.'):'',
-      rHeroSlot: rd ? ('reader-hero-'+(rd.slug||rd.title||'x').toString().toLowerCase().replace(/[^a-z0-9]+/g,'-')) : 'reader-hero-none',
-      rTitle: rd?rd.title:'', rDesc: rd?rd.desc:'', rDate: rd?rd.date:'', rUrl: rd?(rd.url||'#'):'#', rLinkLabel: rd?(rd.linkLabel||'Read on Substack \u2197'):'', rBody: rd?this.formatBody(rd.body):[], rHeroSlot: rd?(rd.slot+'-hero'):'r-hero',
-      rDealAgent: !!(rd && rd.interactive==='deal-agent'),
-      rBloom: !!(rd && rd.interactive==='bloom'),
-      rChartforge: !!(rd && rd.interactive==='chartforge'),
-      rLocalflow: !!(rd && rd.interactive==='localflow'),
-      rEssay: !!(rd && !rd.interactive),
-      dealRef: this.dealRef,
-      keyRef: this.keyRef,
-      saveKey: ()=>{ try{ var v=this.keyRef.current?this.keyRef.current.value:''; if(v) localStorage.setItem('cara_anthropic_key', v); }catch(e){} },
-      runDeal: ()=>this.runDeal(),
-      dealKey: (e)=>this.dealKey(e),
-      dealLoading: this.state.dealLoading,
-      dealError: this.state.dealError,
-      hasMemo: !!dm,
-      dmCompany: dm?dm.company:'', dmTagline: dm?dm.tagline:'',
-      dmBadges: dm? [dm.stage, dm.sector, dm.founded, dm.hq].filter(Boolean) : [],
-      dmMetrics: (dm&&dm.key_metrics)?dm.key_metrics:[],
-      dmSections: dm? [{label:'Business model',body:dm.business_model},{label:'Funding history',body:dm.funding_history},{label:'Competitive moat',body:dm.moat},{label:'Key risks',body:dm.risks}].filter(s=>s.body) : [],
-      dmCompetitors: (dm&&dm.competitors)?dm.competitors:[],
-      dmValuation: dm?dm.ib_valuation_view:'',
-      dmChina: dm?(dm.china_angle||''):'', dmHasChina: !!(dm&&dm.china_angle),
-      dmVerdictLabel: dm? ((dm.verdict||'moderate').charAt(0).toUpperCase()+(dm.verdict||'moderate').slice(1)+' conviction') : '',
-      dmVerdictReason: dm?dm.verdict_reason:'',
-      dmVerdictColor: dm? (dm.verdict==='strong'?'#1f8a4c':(dm.verdict==='weak'?'#c0392b':'#c97a1e')) : '#c97a1e',
-      indexItems,
-      onListMove:(e)=>this.onListMove(e), onListLeave:()=>this.onListLeave(),
-      pvStyle, pvTitle:cur.title, pvDim:cur.dim, pvYear:cur.year, pvMat:cur.mat
-    };
-  }
+float hash3(vec3 p) {
+  p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
+  p *= 17.0;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
 }
-</script>
-</body>
-</html>
+float vnoise(vec3 p) {
+  vec3 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x),
+        mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
+    mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x),
+        mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float turb(vec3 p) {
+  return vnoise(p) * 0.65 + vnoise(p * 2.3) * 0.35;
+}
+varying vec2 vUv;
+varying vec3 vNormalW;
+varying float vU;
+
+float openness(float s, float bloomLocal) {
+  float p = clamp(bloomLocal * (1.0 + uPropagation) - s * uPropagation, 0.0, 1.0);
+  return p * p * (3.0 - 2.0 * p);
+}
+
+vec3 petalPos(vec2 uvIn, float bloomLocal, float seed) {
+  float u = uvIn.x * 2.0 - 1.0;
+  float v = uvIn.y;
+  const int N = 24;
+  float ds = v / float(N);
+  float ang = 0.0;
+  vec2 sp = vec2(0.0);
+  for (int i = 0; i < N; i++) {
+    float s = (float(i) + 0.5) * ds;
+    float density = texture2D(uRamps, vec2(s, 0.5)).g;
+    float curl = mix(uCurlClosed, uCurlOpen, openness(s, bloomLocal));
+    ang += curl * density * ds;
+    sp += vec2(cos(ang), sin(ang)) * ds;
+  }
+  sp *= uLength;
+  float relax = 0.15 + 0.85 * bloomLocal;
+  float wrap = 1.0 - bloomLocal;
+  float width = texture2D(uRamps, vec2(v, 0.5)).r * (1.0 + uAsym * u * relax)
+    * (1.0 + uWrapWidth * wrap);
+  float x = u * width;
+  float zl = -uCup * (1.0 + uWrapCup * wrap) * (1.0 - u * u) * width;
+  zl += uWaveAmp * relax * u * u * sin(v * uWaveFreq + seed * 17.0 + u * 2.3 + seed);
+  zl += 0.01 * relax * sin(seed * 7.0 + v * 5.0) * v;
+  zl += uNoiseAmp * v * bloomLocal
+    * (turb(vec3(u * 2.0 + seed, v * uNoiseFreq, seed * 3.7 + uTime * uWindSpeed * 0.15)) - 0.5) * 2.0;
+  float sa = uSideCurl * x * relax;
+  vec2 xz = mat2(cos(sa), -sin(sa), sin(sa), cos(sa)) * vec2(x, zl);
+  vec3 nd = vec3(0.0, -sin(ang), cos(ang));
+  return vec3(xz.x, sp.x, sp.y) + nd * xz.y;
+}
+
+void main() {
+  vUv = uv;
+  vU = aU;
+  float map = 1.0 - aU;
+  float p = mix(-uTransition, 1.0, uBloom);
+  float mask = clamp((map - p) / uTransition, 0.0, 1.0);
+  float bloomLocal = 1.0 - mask;
+
+  vec3 pos = petalPos(uv, bloomLocal, aSeed);
+  vec3 pu = petalPos(uv + vec2(0.004, 0.0), bloomLocal, aSeed);
+  vec3 pv = petalPos(uv + vec2(0.0, 0.004), bloomLocal, aSeed);
+  vec3 nrm = normalize(cross(pu - pos, pv - pos));
+  float shell = 1.0 + uShellGap * aU * (1.0 - bloomLocal);
+  pos *= shell;
+  float ta = -aTilt * bloomLocal;
+  float ca = cos(ta), sa2 = sin(ta);
+  mat3 rx = mat3(1.0, 0.0, 0.0,  0.0, ca, sa2,  0.0, -sa2, ca);
+  pos = rx * pos;
+  nrm = rx * nrm;
+  vec4 wp = vec4(pos, 1.0);
+#ifdef USE_INSTANCING
+  wp = instanceMatrix * wp;
+  nrm = normalize(mat3(instanceMatrix) * nrm);
+#endif
+  {
+    vec3 wdir = vec3(cos(uWindHeading), 0.0, sin(uWindHeading));
+    float phase = dot(wp.xyz, wdir) * 2.2 - uTime * uWindSpeed * 1.4;
+    float gust = turb(vec3(uTime * uWindSpeed * 0.13, aSeed * 0.31, 0.0));
+    float wave = (turb(vec3(phase * 0.55, wp.y * 1.3, aSeed * 0.7)) - 0.5) * 2.0;
+    float amp = uWindAmp * bloomLocal * uv.y * uv.y * (0.35 + 0.65 * gust);
+    wp.xyz += wdir * amp * wave;
+    wp.y   += amp * 0.4 * (turb(vec3(phase * 0.4 + 7.0, aSeed, 1.0)) - 0.5);
+  }
+  vNormalW = nrm;
+  gl_Position = projectionMatrix * modelViewMatrix * wp;
+}`;
+
+  const frag = /* glsl */ `
+uniform float uFlat;
+uniform vec3 uCol0, uCol1, uCol2, uCol3, uCol4;
+varying vec2 vUv;
+varying vec3 vNormalW;
+varying float vU;
+
+// Cold rim -> hot core ramp. Each petal is coloured by its own base->tip
+// position, so flat mode is simply this gradient with the lighting removed.
+// The five stops are uniforms (defaulting to blue->orange) so a page can
+// recolour the whole flower without rebuilding anything.
+vec3 rampColor(float t) {
+  vec3 col0 = uCol0;
+  vec3 col1 = uCol1;
+  vec3 col2 = uCol2;
+  vec3 col3 = uCol3;
+  vec3 col4 = uCol4;
+  if (t < 0.25)      return mix(col0, col1, smoothstep(0.0, 0.25, t));
+  else if (t < 0.5)  return mix(col1, col2, smoothstep(0.25, 0.5, t));
+  else if (t < 0.75) return mix(col2, col3, smoothstep(0.5, 0.75, t));
+  else               return mix(col3, col4, smoothstep(0.75, 1.0, t));
+}
+
+void main() {
+  // Per-petal gradient: warm (yellow) near the base/axis, cooling to white then
+  // blue toward each petal's tip and outer edge. Flat mode keeps this exact
+  // gradient and only drops the lighting below.
+  float closeness = (1.0 - vUv.y) * 0.7 + (1.0 - vU) * 0.3;
+  vec3 col = rampColor(closeness);
+
+  // 3D lighting: smooth Lambert + subsurface translucency. Everything here
+  // fades to nothing as uFlat -> 1, leaving pure flat ramp colour (no shadows).
+  vec3 n = normalize(vNormalW) * (gl_FrontFacing ? 1.0 : -1.0);
+  vec3 ld = normalize(vec3(0.5, 0.8, 0.6));
+  float lit = mix(0.52 + 0.48 * max(dot(n, ld), 0.0), 1.0, uFlat);
+  float trans = max(dot(-n, ld), 0.0);
+  vec3 transCol = mix(uCol1, uCol4, closeness);
+  col += transCol * trans * trans * 0.3 * (1.0 - uFlat);
+  if (!gl_FrontFacing) lit *= mix(0.88, 1.0, uFlat);
+
+  gl_FragColor = vec4(col * lit, 1.0);
+}`;
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: vert,
+    fragmentShader: frag,
+    side: THREE.DoubleSide,
+  });
+
+  const width = canvasContainer.clientWidth;
+  const height = canvasContainer.clientHeight;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  canvasContainer.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, width / height, 0.01, 100);
+  camera.position.set(1, 3.5, 2.0);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  const baseTargetY = 1.18;
+  // 0 = camera target stays fixed while blooming, so the flower doesn't drift
+  // up in frame as it opens.
+  const bloomTargetCompensation = 0;
+  const minZoomDistance = 1.25;
+  const maxZoomDistance = 6.5;
+  let bloomProgress = 0;
+  const syncTarget = () => {
+    controls.target.y = baseTargetY - bloomTargetCompensation * bloomProgress;
+  };
+  controls.target.set(0, baseTargetY, 0);
+  // Wheel must keep scrolling the page story, so zoom stays off.
+  controls.enableZoom = false;
+
+  // Scroll-driven rotation lives on the group so OrbitControls (camera)
+  // and ScrollTrigger (flower) never fight over the same transform.
+  const flowerGroup = new THREE.Group();
+  flowerGroup.position.y = 0.45;
+  flowerGroup.scale.setScalar(1.3);
+  scene.add(flowerGroup);
+
+  let flower = null;
+  const dummy = new THREE.Object3D();
+  function concentricSpot(index, total) {
+    let placed = 0;
+    for (let ring = 0; placed < total; ring++) {
+      const size = ring === 0 ? 1 : 6 * ring;
+      if (index < placed + size) {
+        const j = index - placed;
+        const maxRing = Math.max(
+          Math.ceil((Math.sqrt(12 * total - 3) - 3) / 6),
+          1,
+        );
+        return {
+          u: ring / maxRing,
+          ang: ring * 0.55 + (j / size) * Math.PI * 2,
+          jit: 0,
+        };
+      }
+      placed += size;
+    }
+    return { u: 1, ang: 0, jit: 0 };
+  }
+
+  function buildFlower() {
+    if (flower) {
+      flowerGroup.remove(flower);
+      flower.geometry.dispose();
+    }
+    const n = params.numPetals;
+    const geo = new THREE.PlaneGeometry(1, 1, 24, 64);
+    geo.deleteAttribute("normal");
+    const aU = new Float32Array(n),
+      aSeed = new Float32Array(n),
+      aTilt = new Float32Array(n);
+    flower = new THREE.InstancedMesh(geo, mat, n);
+    const layoutMax = params.stableLayout ? MAX_LAYOUT_PETALS : n;
+
+    // Per-petal layout. outward push ON → phyllotaxis spiral. OFF → concentric
+    // rings (centre, then 6, 12, 18 … evenly spaced, no jitter): the deliberately
+    // "too neat / mechanical" arrangement used to contrast the spiral.
+    const spots = [];
+    if (params.outwardPush) {
+      for (let i = 0; i < n; i++) {
+        spots.push({
+          u: layoutMax > 1 ? i / (layoutMax - 1) : 0,
+          ang: (params.goldenAngle * i * Math.PI) / 180,
+          jit: 1,
+        });
+      }
+    } else {
+      for (let i = 0; i < n; i++) spots.push(concentricSpot(i, layoutMax));
+    }
+
+    for (let i = 0; i < n; i++) {
+      const { u, ang: a, jit } = spots[i];
+      const h1 = Math.sin(i * 127.1) * 0.5 + 0.5;
+      const h2 = Math.sin(i * 311.7) * 0.5 + 0.5;
+      const h3 = Math.sin(i * 74.3) * 0.5 + 0.5;
+      const j = params.jitter * (0.3 + 0.7 * u) * jit;
+      const r = params.radius * Math.pow(u, params.radiusBias) * (1 + (h1 - 0.5) * j);
+      const y = params.height * Math.pow(u, params.heightBias) * (1 + (h2 - 0.5) * j);
+      dummy.position.set(Math.sin(a) * r, params.height - y, Math.cos(a) * r);
+      dummy.rotation.set(-params.tiltInner, a + Math.PI, (h3 - 0.5) * j * 1.5, "YXZ");
+      aTilt[i] = ((params.outAngle * Math.PI) / 180) * Math.pow(u, params.tiltBias);
+      const s = params.scaleInner + (1 - params.scaleInner) * u;
+      dummy.scale.setScalar(s);
+      dummy.updateMatrix();
+      flower.setMatrixAt(i, dummy.matrix);
+      aU[i] = u;
+      aSeed[i] = (((i * 0.618) % 1) * 20);
+    }
+    geo.setAttribute("aU", new THREE.InstancedBufferAttribute(aU, 1));
+    geo.setAttribute("aSeed", new THREE.InstancedBufferAttribute(aSeed, 1));
+    geo.setAttribute("aTilt", new THREE.InstancedBufferAttribute(aTilt, 1));
+    flower.instanceMatrix.needsUpdate = true;
+    flowerGroup.add(flower);
+  }
+  buildFlower();
+
+  // ===== Stem & leaves =====
+  // Flat-green stem + leaves, tuned for the flat tone-shading look. Parented to
+  // flowerGroup so the whole plant turns together with the scroll rotation.
+  const stemParams = { show: true, length: 1.8, leaves: true };
+  const stemMat = new THREE.MeshBasicMaterial({
+    color: 0x2f7d34,
+    side: THREE.DoubleSide,
+  });
+  const leafMat = new THREE.MeshBasicMaterial({
+    color: 0x46a049,
+    side: THREE.DoubleSide,
+  });
+  let stemGroup = null;
+
+  function makeLeafGeometry() {
+    const s = new THREE.Shape();
+    s.moveTo(0, 0);
+    s.bezierCurveTo(0.14, 0.18, 0.17, 0.55, 0, 0.85);
+    s.bezierCurveTo(-0.17, 0.55, -0.14, 0.18, 0, 0);
+    return new THREE.ShapeGeometry(s, 18);
+  }
+
+  function buildStem() {
+    if (stemGroup) {
+      flowerGroup.remove(stemGroup);
+      stemGroup.traverse((o) => {
+        const m = o;
+        if (m.geometry) m.geometry.dispose();
+      });
+      stemGroup = null;
+    }
+    if (!stemParams.show) return;
+
+    stemGroup = new THREE.Group();
+    const L = stemParams.length;
+    // Stem meets the flower at the bottom of the receptacle (y~0), not up in the
+    // throat. Slightly meandering so it doesn't read as a stiff rod.
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0.02, 0),
+      new THREE.Vector3(0.06, -L * 0.35, 0.05),
+      new THREE.Vector3(-0.05, -L * 0.7, -0.04),
+      new THREE.Vector3(0.02, -L, 0),
+    ]);
+    const stem = new THREE.Mesh(
+      new THREE.TubeGeometry(curve, 48, 0.03, 10, false),
+      stemMat,
+    );
+    stemGroup.add(stem);
+
+    if (stemParams.leaves) {
+      const leafGeo = makeLeafGeometry();
+      // (t along stem, which side, size) — large leaves low on the stem so
+      // they splay out past the bloom's silhouette and stay visible.
+      const placements = [
+        { t: 0.55, side: -1, scale: 1.35 },
+        { t: 0.72, side: 1, scale: 1.5 },
+        { t: 0.88, side: -1, scale: 1.0 },
+      ];
+      for (const p of placements) {
+        const leaf = new THREE.Mesh(leafGeo, leafMat);
+        leaf.position.copy(curve.getPointAt(p.t));
+        leaf.rotation.y = p.side > 0 ? 0.7 : -0.7;
+        leaf.rotation.z = p.side * -0.7;
+        leaf.scale.setScalar(p.scale);
+        stemGroup.add(leaf);
+      }
+    }
+    flowerGroup.add(stemGroup);
+  }
+  buildStem();
+
+  // ===== GUI =====
+  // Fewest petals the layout allows — the Petal tab's reset drops to this so a
+  // single petal is easy to study.
+  const PETAL_MIN = 5;
+  const gui = new GUI({ container: guiContainer });
+  const U = (name) => (v) => {
+    uniforms[name].value = v;
+  };
+  const applyBloom = (v) => {
+    uniforms.uBloom.value = v;
+    const range = Math.max(params.bloomMax - 0.04, 0.001);
+    bloomProgress = THREE.MathUtils.clamp((v - 0.04) / range, 0, 1);
+    syncTarget();
+  };
+
+  // Resets every controller (recursively) back to its initial default value;
+  // each onChange re-applies uniforms / rebuilds the flower as needed.
+  const resetCtrl = gui
+    .add({ reset: () => gui.reset() }, "reset")
+    .name("↺ Reset All");
+
+  const fPetal = gui.addFolder("Petal Geometry");
+
+  // Petal Shape: the flat outline + size of a single petal.
+  const fShape = fPetal.addFolder("Petal Shape");
+  fShape.add(params, "petalLen", 0.3, 1.5).name("Petal Length").onChange(U("uLength"));
+  fShape.add(params, "w0", 0, 0.6).name("Base Width").onChange(bakeRamps);
+  fShape.add(params, "w1", 0, 0.6).name("Lower Width").onChange(bakeRamps);
+  fShape.add(params, "w2", 0, 0.6).name("Upper Width").onChange(bakeRamps);
+  fShape.add(params, "w3", 0, 0.6).name("Tip Width").onChange(bakeRamps);
+
+  // Transform: how that flat petal curls and bends in 3D.
+  const fTransform = fPetal.addFolder("Transform");
+  fTransform.add(params, "curlClosed", 0, 4).name("Curl (Closed)").onChange(U("uCurlClosed"));
+  fTransform.add(params, "curlOpen", -1.5, 1).name("Curl (Open)").onChange(U("uCurlOpen"));
+  fTransform.add(params, "curlBias", 0.3, 4).name("Curl Concentration").onChange(bakeRamps);
+  fTransform.add(params, "cup", 0, 1.5).name("Cup Arch").onChange(U("uCup"));
+  fTransform.add(params, "sideCurl", -3, 3).name("Transverse Curl").onChange(U("uSideCurl"));
+  fTransform.add(params, "waveAmp", 0, 0.08).name("Edge Wave Amp").onChange(U("uWaveAmp"));
+  fTransform.add(params, "asym", -0.4, 0.4).name("Asymmetry").onChange(U("uAsym"));
+
+  const fPhy = gui.addFolder("Phyllotaxis Layout");
+  const numPetalsCtrl = fPhy
+    .add(params, "numPetals", PETAL_MIN, 150, 1)
+    .name("Petals Count")
+    .onChange(buildFlower);
+  fPhy.add(params, "goldenAngle", 90, 180, 0.1).name("Golden Angle").onChange(buildFlower);
+  fPhy.add(params, "radius", 0.1, 1.5).name("Base Radius").onChange(buildFlower);
+  fPhy.add(params, "radiusBias", 0.3, 3).name("Radius Distribution").onChange(buildFlower);
+  fPhy.add(params, "height", 0, 1).name("Receptacle Height").onChange(buildFlower);
+  fPhy.add(params, "heightBias", 0.3, 3).name("Height Distribution").onChange(buildFlower);
+  fPhy.add(params, "scaleInner", 0.1, 1).name("Inner Scale").onChange(buildFlower);
+  fPhy.add(params, "tiltInner", -0.5, 1.5).name("Inner Tilt").onChange(buildFlower);
+  fPhy.add(params, "outAngle", 0, 120).name("Outer Angle (Max)").onChange(buildFlower);
+  fPhy.add(params, "tiltBias", 0.5, 6).name("Tilt Distribution").onChange(buildFlower);
+  fPhy.close();
+
+  const fDetail = gui.addFolder("Wind & Jitter");
+  fDetail.add(params, "jitter", 0, 0.4).name("Petal Jitter").onChange(buildFlower);
+  fDetail.add(params, "shellGap", 0, 0.5).name("Shell Gap (Closed)").onChange(U("uShellGap"));
+  fDetail.add(params, "noiseAmp", 0, 0.12).name("Surface Noise Amp").onChange(U("uNoiseAmp"));
+  fDetail.add(params, "noiseFreq", 1, 15).name("Surface Noise Freq").onChange(U("uNoiseFreq"));
+  fDetail.add(params, "windAmp", 0, 0.5).name("Wind Amplitude").onChange(U("uWindAmp"));
+  fDetail.add(params, "windSpeed", 0, 4).name("Wind Speed").onChange(U("uWindSpeed"));
+  fDetail
+    .add(params, "windHeading", 0, 360)
+    .name("Wind Direction")
+    .onChange((v) => (uniforms.uWindHeading.value = (v * Math.PI) / 180));
+  fDetail.close();
+
+  const fAnim = gui.addFolder("Animation");
+  fAnim.add(params, "bloom", 0, 1).name("Bloom Progress").onChange(applyBloom).listen();
+  fAnim.add(params, "bloomMax", 0.5, 1).name("Bloom Limit");
+  fAnim.add(params, "transition", 0.05, 1).name("Propagation Width").onChange(U("uTransition"));
+  fAnim.add(params, "animate").name("Auto-Animate");
+  // One-shot bloom playback, independent of the Auto-Animate loop.
+  let playStart = null;
+  let playDuration = 5;
+  let playBloomStart = 0.04;
+  fAnim
+    .add({ play: () => (playStart = clock.getElapsedTime()) }, "play")
+    .name("▶ Play");
+
+  const fStyle = gui.addFolder("Render Style");
+  fStyle
+    .add(params, "flat")
+    .name("Flat / Tone Shading")
+    .onChange((v) => (uniforms.uFlat.value = v ? 1 : 0));
+  fStyle.close();
+
+  const fStem = gui.addFolder("Stem & Leaves");
+  fStem.add(stemParams, "show").name("Show Stem").onChange(buildStem);
+  fStem.add(stemParams, "length", 0.8, 3).name("Stem Length").onChange(buildStem);
+  fStem.add(stemParams, "leaves").name("Show Leaves").onChange(buildStem);
+  fStem.close();
+
+  // ===== Tabbed panel =====
+  // The left "Option Tab" rail drives which folder's controls the right
+  // "Control Bar" shows; only the active folder is mounted at a time.
+  let tabsCleanup = null;
+  if (tabsContainer) {
+    const tabFolders = gui.folders; // top-level folders, in creation order
+    resetCtrl.domElement.style.display = "none"; // reset moves into the rail
+    const tabButtons = [];
+    const selectTab = (active) => {
+      tabFolders.forEach((folder, i) => {
+        folder.domElement.style.display = i === active ? "" : "none";
+        if (i === active) folder.open();
+      });
+      tabButtons.forEach((btn, i) =>
+        btn.classList.toggle("active", i === active),
+      );
+    };
+    tabFolders.forEach((folder, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gui-tab";
+      btn.textContent = folder.$title.textContent ?? "";
+      btn.addEventListener("click", () => selectTab(i));
+      tabsContainer.appendChild(btn);
+      tabButtons.push(btn);
+    });
+    // Reset every control to its default, then leave the flower fully bloomed
+    // (its final state) rather than closed back to the bud.
+    const resetAll = () => {
+      gui.reset();
+      params.bloom = params.bloomMax;
+      applyBloom(params.bloom);
+    };
+    const resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "demo-chip demo-chip--reset gui-reset";
+    resetBtn.textContent = "↺ Reset";
+    resetBtn.addEventListener("click", resetAll);
+    tabsContainer.appendChild(resetBtn);
+
+    // Same as Reset All, but also drops the flower to the minimum petal count
+    // so a single petal is easy to study.
+    const petalReset = document.createElement("button");
+    petalReset.type = "button";
+    petalReset.className = "demo-chip demo-chip--reset gui-section-reset";
+    petalReset.textContent = "↺ Reset Petal";
+    petalReset.addEventListener("click", () => {
+      resetAll();
+      numPetalsCtrl.setValue(PETAL_MIN); // rebuilds via onChange + syncs display
+    });
+    tabsContainer.appendChild(petalReset);
+
+    // These two are presenter-only: keep them hidden and reveal the pair only
+    // while Option/Alt is held, so end users never see them.
+    const revealTools = (e) =>
+      tabsContainer.classList.toggle("reveal-tools", e.altKey);
+    const hideTools = () => tabsContainer.classList.remove("reveal-tools");
+    window.addEventListener("keydown", revealTools);
+    window.addEventListener("keyup", revealTools);
+    window.addEventListener("blur", hideTools);
+    tabsCleanup = () => {
+      window.removeEventListener("keydown", revealTools);
+      window.removeEventListener("keyup", revealTools);
+      window.removeEventListener("blur", hideTools);
+    };
+
+    selectTab(0);
+  }
+
+  // ===== resize + render loop =====
+  let pendingResize = null;
+  const ro = new ResizeObserver(() => {
+    const w = canvasContainer.clientWidth,
+      h = canvasContainer.clientHeight;
+    if (!w || !h) return;
+    pendingResize = { w, h };
+  });
+  ro.observe(canvasContainer);
+
+  const onResize = () => {
+    const w = canvasContainer.clientWidth,
+      h = canvasContainer.clientHeight;
+    if (w && h) pendingResize = { w, h };
+  };
+  window.addEventListener("resize", onResize);
+
+  const clock = new THREE.Clock();
+  renderer.setAnimationLoop(() => {
+    if (pendingResize) {
+      const { w, h } = pendingResize;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      pendingResize = null;
+    }
+    uniforms.uTime.value = clock.getElapsedTime();
+    if (params.animate) {
+      const t = clock.getElapsedTime() % 11;
+      let x = Math.min(Math.max(t / playDuration, 0), 1);
+      x = 1 - Math.pow(1 - x, 3.2);
+      params.bloom = 0.04 + (params.bloomMax - 0.04) * x;
+      applyBloom(params.bloom);
+    } else if (playStart !== null) {
+      const t = clock.getElapsedTime() - playStart;
+      let x = Math.min(Math.max(t / playDuration, 0), 1);
+      x = 1 - Math.pow(1 - x, 3.2);
+      params.bloom = playBloomStart + (params.bloomMax - playBloomStart) * x;
+      applyBloom(params.bloom);
+      if (t >= playDuration) playStart = null;
+    }
+    controls.update();
+    renderer.render(scene, camera);
+  });
+
+  return {
+    /** Scroll-driven bloom; ignored while the GUI's Auto-Animate loop owns it. */
+    setBloom(v) {
+      if (params.animate) return;
+      params.bloom = v;
+      applyBloom(v);
+    },
+    /** Scroll-driven turntable rotation of the whole flower. */
+    setRotation(y) {
+      flowerGroup.rotation.y = y;
+    },
+    /** One-shot replay of the bud -> full bloom; drives the finale Bloom button. */
+    playBloom() {
+      if (params.animate) return;
+      playStart = clock.getElapsedTime();
+    },
+    setBloomDuration(seconds) {
+      playDuration = THREE.MathUtils.clamp(seconds, 1.2, 8);
+    },
+    setBloomStart(v) {
+      playBloomStart = THREE.MathUtils.clamp(v, 0, 0.45);
+    },
+    setBloomMax(v) {
+      params.bloomMax = THREE.MathUtils.clamp(v, 0.5, 1);
+      if (params.bloom > params.bloomMax) {
+        params.bloom = params.bloomMax;
+        applyBloom(params.bloom);
+      }
+    },
+    /**
+     * Set the initial camera position (the orbit target stays on the flower
+     * head). Used by the dahlia showcase to frame the bloom side-on, the way
+     * the reference photo is shot, so the recurving outer petals read clearly.
+     */
+    setCameraView(pos) {
+      camera.position.set(pos[0], pos[1], pos[2]);
+      controls.update();
+    },
+    /** Modifier-wheel zoom; ordinary wheel is reserved for story scrolling. */
+    zoomBy(deltaY) {
+      const offset = camera.position.clone().sub(controls.target);
+      const nextDistance = THREE.MathUtils.clamp(
+        offset.length() * Math.exp(deltaY * 0.001),
+        minZoomDistance,
+        maxZoomDistance,
+      );
+      camera.position.copy(
+        controls.target.clone().add(offset.setLength(nextDistance)),
+      );
+      controls.update();
+    },
+    /** Rebuilds the layout — used by the /mockup showcase sliders. */
+    setGoldenAngle(deg) {
+      params.goldenAngle = deg;
+      buildFlower();
+    },
+    setStableLayout(on) {
+      if (params.stableLayout === on) return;
+      params.stableLayout = on;
+      buildFlower();
+    },
+    /** false → concentric-ring ("mechanical") layout instead of the spiral. */
+    setOutwardPush(on) {
+      params.outwardPush = on;
+      buildFlower();
+    },
+    setNumPetals(n) {
+      params.numPetals = THREE.MathUtils.clamp(
+        Math.round(n),
+        1,
+        MAX_LAYOUT_PETALS,
+      );
+      buildFlower();
+    },
+    /** Petal curl-when-closed. */
+    setCurl(v) {
+      params.curlClosed = v;
+      uniforms.uCurlClosed.value = v;
+    },
+    /** Open-petal curl — what's visible on a bloomed flower (/demo card 01). */
+    setCurlOpen(v) {
+      const c = THREE.MathUtils.clamp(v, -1.5, 1.2);
+      params.curlOpen = c;
+      uniforms.uCurlOpen.value = c;
+    },
+    /** Petal width ramp [w0..w3] — driven by the /demo "Folded petal" card. */
+    setPetalWidths([w0, w1, w2, w3]) {
+      params.w0 = w0;
+      params.w1 = w1;
+      params.w2 = w2;
+      params.w3 = w3;
+      bakeRamps();
+    },
+    /** Bloom wavefront width — driven by the /demo "Bloom dial" card. */
+    setTransition(v) {
+      params.transition = v;
+      uniforms.uTransition.value = v;
+    },
+    setWaveAmp(v) {
+      params.waveAmp = THREE.MathUtils.clamp(v, 0, 0.12);
+      uniforms.uWaveAmp.value = params.waveAmp;
+    },
+    setWindAmp(v) {
+      params.windAmp = v;
+      uniforms.uWindAmp.value = v;
+    },
+    setWindSpeed(v) {
+      params.windSpeed = v;
+      uniforms.uWindSpeed.value = v;
+    },
+    /** Petal cup arch (transverse spoon). Uniform-only — safe to drag live. */
+    setCup(v) {
+      params.cup = v;
+      uniforms.uCup.value = v;
+    },
+    /** Edge roll (involute "quilled" look of a ball dahlia). Uniform-only. */
+    setSideCurl(v) {
+      params.sideCurl = v;
+      uniforms.uSideCurl.value = v;
+    },
+    /** Flat tone-shading vs. soft Lambert + subsurface lighting. */
+    setFlat(on) {
+      params.flat = on;
+      uniforms.uFlat.value = on ? 1 : 0;
+    },
+    /** Recolour the five-stop petal ramp (cold rim -> hot core), each [r,g,b]. */
+    setPalette(stops) {
+      const us = [
+        uniforms.uCol0,
+        uniforms.uCol1,
+        uniforms.uCol2,
+        uniforms.uCol3,
+        uniforms.uCol4,
+      ];
+      stops.slice(0, 5).forEach((c, i) => us[i].value.set(c[0], c[1], c[2]));
+    },
+    /**
+     * Apply a whole look at once: merge a partial param patch, re-bake the
+     * width/curl ramps, push shape uniforms and rebuild the layout. Heavy
+     * (rebuilds the mesh) — call it for presets, not for per-frame slider drags.
+     */
+    applyPreset(patch) {
+      Object.assign(params, patch);
+      bakeRamps();
+      syncShapeUniforms();
+      buildFlower();
+    },
+    /** Show/hide the stem + leaves (/demo hides it on the single-petal card). */
+    setStemVisible(show) {
+      if (stemParams.show === show) return;
+      stemParams.show = show;
+      buildStem();
+    },
+    bloomMax: params.bloomMax,
+    dispose() {
+      renderer.setAnimationLoop(null);
+      ro.disconnect();
+      window.removeEventListener("resize", onResize);
+      gui.destroy();
+      tabsCleanup?.();
+      if (tabsContainer) tabsContainer.replaceChildren();
+      controls.dispose();
+      flower?.geometry.dispose();
+      stemGroup?.traverse((o) => {
+        const m = o;
+        if (m.geometry) m.geometry.dispose();
+      });
+      stemMat.dispose();
+      leafMat.dispose();
+      mat.dispose();
+      rampTex.dispose();
+      renderer.dispose();
+      renderer.domElement.remove();
+    },
+  };
+}
+
